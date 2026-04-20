@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { supabase } from "@/utils/supabase";
+import { obtenerEstadosPersistencia } from "@/types/incidentes";
 
 const TIPOS_GTC45 = [
   "Fisico",
@@ -32,11 +33,12 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
     setError(null);
 
     // ESCRITURA (INSERT): guardamos un incidente nuevo en la tabla incidentes.
+    const [estadoPersistencia] = obtenerEstadosPersistencia("Abierto");
     const { error: insertError } = await supabase.from("incidentes").insert({
       titulo,
       descripcion,
       tipo_peligro: tipoPeligro,
-      estado: "pendiente",
+      estado: estadoPersistencia,
       fecha_suceso: new Date().toISOString(),
     });
 
@@ -49,7 +51,7 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
     setTitulo("");
     setDescripcion("");
     setTipoPeligro(TIPOS_GTC45[0]);
-    setMensaje("Incidente enviado con estado pendiente.");
+    setMensaje("Incidente enviado con estado Abierto.");
     setLoading(false);
     onIncidenteCreado?.();
   };

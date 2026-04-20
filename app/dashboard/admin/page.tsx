@@ -7,6 +7,7 @@ import { supabase } from "@/utils/supabase";
 import {
   ESTADOS_INCIDENTE,
   normalizarEstado,
+  obtenerEstadosPersistencia,
   type AuditLog,
   type EstadoIncidente,
   type Incidente,
@@ -22,22 +23,8 @@ const COLOR_ESTADO: Record<EstadoIncidente, string> = {
 
 export default function DashboardAdminPage() {
   const router = useRouter();
-  const [usuario] = useState<UsuarioSimulado | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    const usuarioGuardado = localStorage.getItem("sst_user");
-    if (!usuarioGuardado) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(usuarioGuardado) as UsuarioSimulado;
-    } catch {
-      return null;
-    }
-  });
+  const [usuario, setUsuario] = useState<UsuarioSimulado | null>(null);
+  const [authCargada, setAuthCargada] = useState(false);
   const [incidentes, setIncidentes] = useState<Incidente[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +38,7 @@ export default function DashboardAdminPage() {
   const cargarIncidentes = async () => {
     const { data, error: fetchError } = await supabase
       .from("incidentes")
-      .select("id, titulo, descripcion, tipo_peligro, estado, created_at, fecha_suceso, user_email, evidencia_url")
+      .select("id, titulo, descripcion, tipo_peligro, estado, created_at, fecha_suceso, user_email, evidencias(url_storage, tipo_archivo, created_at)")
       .order("created_at", { ascending: false });
 
     let incidentesCrudos = data as unknown as Incidente[] | null;
@@ -72,10 +59,16 @@ export default function DashboardAdminPage() {
     }
 
     setError(null);
-    const normalizados = (incidentesCrudos ?? []).map((incidente) => ({
-      ...incidente,
-      estado: normalizarEstado(incidente.estado),
-    }));
+    const normalizados = (incidentesCrudos ?? []).map((incidente) => {
+      const evidencias = incidente.evidencias ?? [];
+      const evidenciaReciente = evidencias[0];
+
+      return {
+        ...incidente,
+        estado: normalizarEstado(incidente.estado),
+        evidencia_url: incidente.evidencia_url ?? evidenciaReciente?.url_storage ?? null,
+      };
+    });
     setIncidentes(normalizados);
     setLoading(false);
   };
@@ -100,12 +93,28 @@ export default function DashboardAdminPage() {
   };
 
   useEffect(() => {
-    if (!usuario) {
-      router.push("/");
+    const usuarioGuardado = localStorage.getItem("sst_user");
+    if (!usuarioGuardado) {
+      setUsuario(null);
+      setAuthCargada(true);
       return;
     }
 
-    if (usuario.rol !== "ADMIN") {
+    try {
+      setUsuario(JSON.parse(usuarioGuardado) as UsuarioSimulado);
+    } catch {
+      setUsuario(null);
+    } finally {
+      setAuthCargada(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authCargada) {
+      return;
+    }
+
+    if (!usuario || usuario.rol !== "ADMIN") {
       router.push("/");
       return;
     }
@@ -115,7 +124,7 @@ export default function DashboardAdminPage() {
     }, 0);
 
     return () => clearTimeout(timeoutId);
-  }, [router, usuario]);
+  }, [authCargada, router, usuario]);
 
   const seleccionarIncidente = async (incidente: Incidente) => {
     setIncidenteSeleccionado(incidente);
@@ -129,10 +138,27 @@ export default function DashboardAdminPage() {
     setLoading(true);
     setError(null);
 
-    const { error: updateError } = await supabase.from("incidentes").update({ estado }).eq("id", incidenteId);
+    const candidatos = obtenerEstadosPersistencia(estado);
+    let updateError: Error | null = null;
+
+    for (const estadoPersistencia of candidatos) {
+      const { error } = await supabase
+        .from("incidentes")
+        .update({ estado: estadoPersistencia })
+        .eq("id", incidenteId);
+
+      if (!error) {
+        updateError = null;
+        break;
+      }
+
+      updateError = error;
+    }
 
     if (updateError) {
-      setError(`No se pudo actualizar el estado: ${updateError.message}`);
+      setError(
+        `No se pudo actualizar el estado: ${updateError.message}. Valores probados: ${candidatos.join(", ")}`
+      );
       setLoading(false);
       return false;
     }
@@ -217,7 +243,7 @@ export default function DashboardAdminPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100">
-      <Navbar rolActual="ADMIN" correo={usuario?.email ?? "especialista@test.com"} />
+      <Navbar rolActual="ADMIN" correo={usuario?.email ?? ""} />
 
       <div className="flex min-h-[calc(100vh-73px)]">
         <aside className="hidden w-72 bg-blue-900 p-6 text-blue-50 lg:block">

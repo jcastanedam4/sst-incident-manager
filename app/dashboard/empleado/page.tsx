@@ -4,26 +4,12 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { supabase } from "@/utils/supabase";
-import { TIPOS_GTC45, type UsuarioSimulado } from "@/types/incidentes";
+import { TIPOS_GTC45, obtenerEstadosPersistencia, type UsuarioSimulado } from "@/types/incidentes";
 
 export default function DashboardEmpleadoPage() {
   const router = useRouter();
-  const [usuario] = useState<UsuarioSimulado | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    const usuarioGuardado = localStorage.getItem("sst_user");
-    if (!usuarioGuardado) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(usuarioGuardado) as UsuarioSimulado;
-    } catch {
-      return null;
-    }
-  });
+  const [usuario, setUsuario] = useState<UsuarioSimulado | null>(null);
+  const [authCargada, setAuthCargada] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [tipoPeligro, setTipoPeligro] = useState<string>(TIPOS_GTC45[0]);
@@ -33,10 +19,31 @@ export default function DashboardEmpleadoPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const usuarioGuardado = localStorage.getItem("sst_user");
+    if (!usuarioGuardado) {
+      setUsuario(null);
+      setAuthCargada(true);
+      return;
+    }
+
+    try {
+      setUsuario(JSON.parse(usuarioGuardado) as UsuarioSimulado);
+    } catch {
+      setUsuario(null);
+    } finally {
+      setAuthCargada(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authCargada) {
+      return;
+    }
+
     if (!usuario || usuario.rol !== "EMPLEADO") {
       router.push("/");
     }
-  }, [router, usuario]);
+  }, [authCargada, router, usuario]);
 
   const enviarIncidente = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -44,20 +51,36 @@ export default function DashboardEmpleadoPage() {
     setMensaje(null);
     setError(null);
 
-    const { data: incidenteCreado, error: insertError } = await supabase
-      .from("incidentes")
-      .insert({
-        titulo,
-        descripcion,
-        tipo_peligro: tipoPeligro,
-        estado: "Abierto",
-        fecha_suceso: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
+    let incidenteCreado: { id: string } | null = null;
+    let insertError: Error | null = null;
+    const candidatosEstado = obtenerEstadosPersistencia("Abierto");
+
+    for (const estadoPersistencia of candidatosEstado) {
+      const { data, error } = await supabase
+        .from("incidentes")
+        .insert({
+          titulo,
+          descripcion,
+          tipo_peligro: tipoPeligro,
+          estado: estadoPersistencia,
+          fecha_suceso: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (!error) {
+        incidenteCreado = data as { id: string };
+        insertError = null;
+        break;
+      }
+
+      insertError = error;
+    }
 
     if (insertError) {
-      setError(`No se pudo guardar el incidente: ${insertError.message}`);
+      setError(
+        `No se pudo guardar el incidente: ${insertError.message}. Valores probados para estado: ${candidatosEstado.join(", ")}`
+      );
       setLoading(false);
       return;
     }
@@ -83,14 +106,15 @@ export default function DashboardEmpleadoPage() {
 
       const { data: publicUrlData } = supabase.storage.from("evidencias-incidentes").getPublicUrl(subidaData.path);
 
-      const { error: updateEvidenciaError } = await supabase
-        .from("incidentes")
-        .update({ evidencia_url: publicUrlData.publicUrl })
-        .eq("id", incidenteCreado.id);
+      const { error: insertEvidenciaError } = await supabase.from("evidencias").insert({
+        incidente_id: incidenteCreado.id,
+        url_storage: publicUrlData.publicUrl,
+        tipo_archivo: archivoAdjunto.type || "application/octet-stream",
+      });
 
-      if (updateEvidenciaError) {
+      if (insertEvidenciaError) {
         mensajeResultado =
-          "Incidente y evidencia creados, pero no se pudo guardar el enlace en la tabla incidentes.";
+          "Incidente y archivo cargados, pero no se pudo registrar evidencia en la tabla evidencias.";
       } else {
         mensajeResultado = "Incidente enviado con evidencia multimedia.";
       }
@@ -106,7 +130,7 @@ export default function DashboardEmpleadoPage() {
 
   return (
     <div className="min-h-screen bg-zinc-100">
-      <Navbar rolActual="EMPLEADO" correo={usuario?.email ?? "empleado@test.com"} />
+      <Navbar rolActual="EMPLEADO" correo={usuario?.email ?? ""} />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
         <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">

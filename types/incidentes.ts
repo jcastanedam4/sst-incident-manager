@@ -17,6 +17,15 @@ export type Incidente = {
   fecha_suceso?: string | null;
   user_email?: string | null;
   evidencia_url?: string | null;
+  evidencias?: Evidencia[] | null;
+};
+
+export type Evidencia = {
+  id?: string;
+  incidente_id?: string;
+  url_storage: string;
+  tipo_archivo?: string | null;
+  created_at?: string;
 };
 
 export type AuditLog = {
@@ -38,6 +47,10 @@ export const TIPOS_GTC45 = [
   "Seguridad",
   "Fenomeno natural",
 ] as const;
+
+export const obtenerEstadosPersistencia = (estado: EstadoIncidente): string[] => {
+  return [estado];
+};
 
 export const normalizarEstado = (estado: string): EstadoIncidente => {
   const limpio = estado.trim().toLowerCase();

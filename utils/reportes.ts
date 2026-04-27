@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import * as XLSX from "xlsx";
+import { Workbook } from "exceljs";
 import type { Incidente } from "@/types/incidentes";
 
 const descargarBlob = (blob: Blob, nombreArchivo: string) => {
@@ -11,7 +11,7 @@ const descargarBlob = (blob: Blob, nombreArchivo: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const exportarIncidentesExcel = (incidentes: Incidente[]) => {
+export const exportarIncidentesExcel = async (incidentes: Incidente[]) => {
   const filas = incidentes.map((incidente) => ({
     ID: incidente.id,
     Titulo: incidente.titulo,
@@ -24,10 +24,12 @@ export const exportarIncidentesExcel = (incidentes: Incidente[]) => {
     EvidenciaURL: incidente.evidencia_url ?? "",
   }));
 
-  const hoja = XLSX.utils.json_to_sheet(filas);
-  const libro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(libro, hoja, "Incidentes");
-  const excelArray = XLSX.write(libro, { type: "array", bookType: "xlsx" });
+  const workbook = new Workbook();
+  const worksheet = workbook.addWorksheet("Incidentes");
+  worksheet.columns = Object.keys(filas[0] ?? { ID: "" }).map((key) => ({ header: key, key, width: 22 }));
+  worksheet.addRows(filas);
+
+  const excelArray = await workbook.xlsx.writeBuffer();
   const blob = new Blob([excelArray], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });

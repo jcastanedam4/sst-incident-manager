@@ -1,14 +1,12 @@
 import { exportarIncidentesExcel, exportarIndicadoresPdf } from "@/utils/reportes";
 import type { Incidente } from "@/types/incidentes";
 
-const xlsxState: {
+const excelState: {
   rows: Array<Record<string, unknown>>;
-  appendCalls: number;
-  writeCalls: number;
+  writeBufferCalls: number;
 } = {
   rows: [],
-  appendCalls: 0,
-  writeCalls: 0,
+  writeBufferCalls: 0,
 };
 
 const pdfState: {
@@ -21,22 +19,30 @@ const pdfState: {
   textCalls: [],
 };
 
-vi.mock("xlsx", () => {
+vi.mock("exceljs", () => {
+  class MockWorksheet {
+    columns: Array<{ header: string; key: string; width: number }> = [];
+
+    addRows(rows: Array<Record<string, unknown>>) {
+      excelState.rows = rows;
+    }
+  }
+
+  class MockWorkbook {
+    xlsx = {
+      writeBuffer: async () => {
+        excelState.writeBufferCalls += 1;
+        return new ArrayBuffer(16);
+      },
+    };
+
+    addWorksheet() {
+      return new MockWorksheet();
+    }
+  }
+
   return {
-    utils: {
-      json_to_sheet: (rows: Array<Record<string, unknown>>) => {
-        xlsxState.rows = rows;
-        return { rows };
-      },
-      book_new: () => ({ sheets: [] as Array<unknown> }),
-      book_append_sheet: () => {
-        xlsxState.appendCalls += 1;
-      },
-    },
-    write: () => {
-      xlsxState.writeCalls += 1;
-      return new ArrayBuffer(16);
-    },
+    Workbook: MockWorkbook,
   };
 });
 
@@ -110,9 +116,8 @@ describe("utils/reportes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-26T12:00:00.000Z"));
 
-    xlsxState.rows = [];
-    xlsxState.appendCalls = 0;
-    xlsxState.writeCalls = 0;
+    excelState.rows = [];
+    excelState.writeBufferCalls = 0;
 
     pdfState.savedFileName = null;
     pdfState.pageCount = 1;
@@ -128,7 +133,7 @@ describe("utils/reportes", () => {
     document.createElement = originalCreateElement;
   });
 
-  it("exporta incidentes a Excel con estructura esperada y nombre con fecha", () => {
+  it("exporta incidentes a Excel con estructura esperada y nombre con fecha", async () => {
     const clickSpy = vi.fn();
     const anchor = {
       href: "",
@@ -138,17 +143,16 @@ describe("utils/reportes", () => {
 
     vi.spyOn(document, "createElement").mockReturnValue(anchor);
 
-    exportarIncidentesExcel(incidentesBase);
+    await exportarIncidentesExcel(incidentesBase);
 
-    expect(xlsxState.rows).toHaveLength(3);
-    expect(xlsxState.rows[0]).toMatchObject({
+    expect(excelState.rows).toHaveLength(3);
+    expect(excelState.rows[0]).toMatchObject({
       ID: "1",
       Titulo: "Piso humedo",
       Estado: "Abierto",
       EvidenciaURL: "https://example.com/evidencia.jpg",
     });
-    expect(xlsxState.appendCalls).toBe(1);
-    expect(xlsxState.writeCalls).toBe(1);
+    expect(excelState.writeBufferCalls).toBe(1);
     expect(anchor.download).toBe("incidentes_2026-04-26.xlsx");
     expect(anchor.href).toBe("blob:archivo");
     expect(clickSpy).toHaveBeenCalledTimes(1);

@@ -3,12 +3,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { supabase } from "@/utils/supabase";
-import { TIPOS_GTC45, obtenerEstadosPersistencia, type UsuarioSimulado } from "@/types/incidentes";
+import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
+import { TIPOS_GTC45, obtenerEstadosPersistencia, type UsuarioApp } from "@/types/incidentes";
 
 export default function DashboardEmpleadoPage() {
   const router = useRouter();
-  const [usuario, setUsuario] = useState<UsuarioSimulado | null>(null);
+  const [usuario, setUsuario] = useState<UsuarioApp | null>(null);
   const [authCargada, setAuthCargada] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -19,20 +19,13 @@ export default function DashboardEmpleadoPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const usuarioGuardado = localStorage.getItem("sst_user");
-    if (!usuarioGuardado) {
-      setUsuario(null);
+    const cargarSesion = async () => {
+      const usuarioActual = await obtenerUsuarioSesion();
+      setUsuario(usuarioActual);
       setAuthCargada(true);
-      return;
-    }
+    };
 
-    try {
-      setUsuario(JSON.parse(usuarioGuardado) as UsuarioSimulado);
-    } catch {
-      setUsuario(null);
-    } finally {
-      setAuthCargada(true);
-    }
+    void cargarSesion();
   }, []);
 
   useEffect(() => {
@@ -40,7 +33,12 @@ export default function DashboardEmpleadoPage() {
       return;
     }
 
-    if (!usuario || usuario.rol !== "EMPLEADO") {
+    if (!usuario) {
+      router.push("/");
+      return;
+    }
+
+    if (usuario.rol !== "EMPLEADO") {
       router.push("/");
     }
   }, [authCargada, router, usuario]);
@@ -64,6 +62,7 @@ export default function DashboardEmpleadoPage() {
           tipo_peligro: tipoPeligro,
           estado: estadoPersistencia,
           fecha_suceso: new Date().toISOString(),
+          user_email: usuario?.email ?? null,
         })
         .select("id")
         .single();

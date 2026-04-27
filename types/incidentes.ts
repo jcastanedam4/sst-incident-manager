@@ -2,19 +2,28 @@ export const ESTADOS_INCIDENTE = ["Abierto", "En Proceso", "Cerrado"] as const;
 
 export type EstadoIncidente = (typeof ESTADOS_INCIDENTE)[number];
 
-export type UsuarioSimulado = {
+export const ROLES_USUARIO = ["ADMIN", "EMPLEADO"] as const;
+
+export type RolUsuario = (typeof ROLES_USUARIO)[number];
+
+export type UsuarioApp = {
   email: string;
-  rol: "EMPLEADO" | "ADMIN";
+  rol: RolUsuario;
+  id: string;
 };
+
+export type UsuarioSimulado = UsuarioApp;
 
 export type Incidente = {
   id: string;
+  user_id?: string | null;
   titulo: string;
   descripcion: string;
   tipo_peligro: string;
   estado: string;
   created_at?: string | null;
   fecha_suceso?: string | null;
+  ubicacion?: string | null;
   user_email?: string | null;
   evidencia_url?: string | null;
   evidencias?: Evidencia[] | null;

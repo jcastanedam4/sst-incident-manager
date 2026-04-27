@@ -32,6 +32,7 @@ Establecer una linea base de calidad con pruebas unitarias ejecutadas realmente 
 - `tests/utils/reportes.test.ts`
 
 Casos cubiertos:
+
 - `obtenerEstadosPersistencia` retorna candidato correcto.
 - `normalizarEstado` cubre estados nuevos y legados (`abierto`, `pendiente`, `en_revision`, `en revision`).
 - `exportarIncidentesExcel` valida transformacion de filas y nombre de archivo.
@@ -52,6 +53,7 @@ npm run test
 ```
 
 Resultado:
+
 - Test Files: 2 passed
 - Tests: 7 passed
 - Estado: OK
@@ -63,11 +65,13 @@ npm run test:coverage
 ```
 
 Resultado:
+
 - Test Files: 2 passed
 - Tests: 7 passed
 - Estado: OK
 
 Cobertura reportada por Vitest (V8):
+
 - Global: 91.5% statements, 82.6% branches, 83.33% funcs, 91.5% lines
 - `types/incidentes.ts`: 100% en todas las metricas
 - `utils/reportes.ts`: 100% statements/lines/functions, 78.57% branches
@@ -80,6 +84,7 @@ npm audit
 ```
 
 Resultado:
+
 - Vulnerabilidades encontradas: 0
 - Estado: OK
 

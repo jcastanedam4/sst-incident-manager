@@ -2,38 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type UsuarioSimulado = {
-  email: string;
-  rol: "EMPLEADO" | "ADMIN";
-};
-
-type CredencialSimulada = {
-  email: string;
-  password: string;
-  rol: "EMPLEADO" | "ADMIN";
-  redirectTo: "/dashboard/empleado" | "/dashboard/admin";
-  origen: "INVITADO" | "REGISTRO" | "ADMIN";
-};
-
-const STORAGE_USUARIOS_REGISTRADOS = "sst_registered_users";
-
-const USUARIOS_QUEMADOS = [
-  {
-    email: "invitado@sst.com",
-    password: "Invitado123",
-    rol: "EMPLEADO" as const,
-    redirectTo: "/dashboard/empleado",
-    origen: "INVITADO" as const,
-  },
-  {
-    email: "encargado.sst@empresa.com",
-    password: "E1234",
-    rol: "ADMIN" as const,
-    redirectTo: "/dashboard/admin",
-    origen: "ADMIN" as const,
-  },
-] satisfies CredencialSimulada[];
+import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
 
 export default function Home() {
   const router = useRouter();
@@ -43,83 +12,63 @@ export default function Home() {
   const [correoRegistro, setCorreoRegistro] = useState("");
   const [contrasenaRegistro, setContrasenaRegistro] = useState("");
   const [confirmarContrasenaRegistro, setConfirmarContrasenaRegistro] = useState("");
-
-  const obtenerUsuariosRegistrados = (): CredencialSimulada[] => {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    const crudo = localStorage.getItem(STORAGE_USUARIOS_REGISTRADOS);
-    if (!crudo) {
-      return [];
-    }
-
-    try {
-      const parseado = JSON.parse(crudo) as Array<{ email: string; password: string }>;
-      return parseado.map((u) => ({
-        email: u.email,
-        password: u.password,
-        rol: "EMPLEADO",
-        redirectTo: "/dashboard/empleado",
-        origen: "REGISTRO",
-      }));
-    } catch {
-      return [];
-    }
-  };
+  const [error, setError] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const [cargandoLogin, setCargandoLogin] = useState(false);
+  const [cargandoRegistro, setCargandoRegistro] = useState(false);
 
   useEffect(() => {
-    const usuarioGuardado = localStorage.getItem("sst_user");
-    if (!usuarioGuardado) {
-      return;
-    }
-
-    try {
-      const usuario = JSON.parse(usuarioGuardado) as UsuarioSimulado;
-
-      if (usuario.rol === "ADMIN") {
-        router.push("/dashboard/admin");
+    const validarSesion = async () => {
+      const usuario = await obtenerUsuarioSesion();
+      if (!usuario) {
         return;
       }
 
-      router.push("/dashboard/empleado");
-    } catch {
-      localStorage.removeItem("sst_user");
-    }
+      router.push(usuario.rol === "ADMIN" ? "/dashboard/admin" : "/dashboard/empleado");
+    };
+
+    void validarSesion();
   }, [router]);
 
-  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const correoLimpio = correo.trim().toLowerCase();
-    const credencialesDisponibles = [...USUARIOS_QUEMADOS, ...obtenerUsuariosRegistrados()];
+    setError(null);
+    setMensaje(null);
+
     if (!correoLimpio || !contrasena) {
       alert("Credenciales incorrectas");
       return;
     }
 
-    const usuarioValido = credencialesDisponibles.find(
-      (usuario) => usuario.email === correoLimpio && usuario.password === contrasena
-    );
+    setCargandoLogin(true);
 
-    if (!usuarioValido) {
-      alert("Credenciales incorrectas");
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: correoLimpio,
+      password: contrasena,
+    });
+
+    if (loginError) {
+      setError(`No fue posible iniciar sesion: ${loginError.message}`);
+      setCargandoLogin(false);
       return;
     }
 
-    const usuarioSesion: UsuarioSimulado = {
-      email: usuarioValido.email,
-      rol: usuarioValido.rol,
-    };
+    const usuario = await obtenerUsuarioSesion();
+    setCargandoLogin(false);
 
-    localStorage.setItem("sst_user", JSON.stringify(usuarioSesion));
+    if (!usuario) {
+      setError("Sesion iniciada, pero no fue posible obtener el perfil del usuario.");
+      return;
+    }
 
-    router.push(usuarioValido.redirectTo);
+    router.push(usuario.rol === "ADMIN" ? "/dashboard/admin" : "/dashboard/empleado");
   };
 
-  const handleRegistro = (event: FormEvent<HTMLFormElement>) => {
+  const handleRegistro = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const usuariosRegistrados = obtenerUsuariosRegistrados();
-    const credencialesDisponibles = [...USUARIOS_QUEMADOS, ...usuariosRegistrados];
+    setError(null);
+    setMensaje(null);
 
     const correoLimpio = correoRegistro.trim().toLowerCase();
     if (!correoLimpio || !contrasenaRegistro) {
@@ -137,18 +86,29 @@ export default function Home() {
       return;
     }
 
-    const existe = credencialesDisponibles.some((usuario) => usuario.email === correoLimpio);
-    if (existe) {
-      alert("Ese correo ya esta registrado.");
+    setCargandoRegistro(true);
+
+    const { data, error: registroError } = await supabase.auth.signUp({
+      email: correoLimpio,
+      password: contrasenaRegistro,
+      options: {
+        data: {
+          role: "EMPLEADO",
+        },
+      },
+    });
+
+    if (registroError) {
+      setError(`No fue posible crear la cuenta: ${registroError.message}`);
+      setCargandoRegistro(false);
       return;
     }
 
-    const nuevosRegistros = [
-      ...usuariosRegistrados.map((u) => ({ email: u.email, password: u.password })),
-      { email: correoLimpio, password: contrasenaRegistro },
-    ];
-
-    localStorage.setItem(STORAGE_USUARIOS_REGISTRADOS, JSON.stringify(nuevosRegistros));
+    if (!data.session) {
+      setMensaje("Cuenta creada. Revisa tu correo para confirmar la cuenta antes de iniciar sesion.");
+    } else {
+      setMensaje("Cuenta creada. Ya puedes ingresar con tu nuevo usuario.");
+    }
 
     setCorreoRegistro("");
     setContrasenaRegistro("");
@@ -156,16 +116,16 @@ export default function Home() {
     setModoRegistro(false);
     setCorreo(correoLimpio);
     setContrasena(contrasenaRegistro);
-    alert("Cuenta de empleado creada. Ahora puedes iniciar sesion.");
+    setCargandoRegistro(false);
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 py-10">
       <main className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Ingreso Simulado SST</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Ingreso SST</p>
         <h1 className="mt-2 text-2xl font-bold text-zinc-900">Iniciar sesion</h1>
         <p className="mt-2 text-sm text-zinc-600">
-          Admin: Encargado SST. Empleados: cuenta invitado o cuenta registrada.
+          Autenticacion con Supabase Auth. El rol del usuario se toma desde metadata (ADMIN o EMPLEADO).
         </p>
 
         <form onSubmit={handleLogin} className="mt-6 space-y-4">
@@ -201,9 +161,10 @@ export default function Home() {
 
           <button
             type="submit"
+            disabled={cargandoLogin}
             className="inline-flex w-full items-center justify-center rounded-lg bg-[#1E3A8A] px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-900"
           >
-            Ingresar
+            {cargandoLogin ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
 
@@ -256,17 +217,22 @@ export default function Home() {
             />
             <button
               type="submit"
+              disabled={cargandoRegistro}
               className="inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700"
             >
-              Crear cuenta empleado
+              {cargandoRegistro ? "Creando cuenta..." : "Crear cuenta empleado"}
             </button>
           </form>
         )}
 
-        <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600">
-          <p>Usuarios de prueba:</p>
-          <p>- invitado@sst.com / Invitado123 -&gt; Dashboard Empleado (invitado)</p>
-          <p>- encargado.sst@empresa.com / E1234 -&gt; Dashboard Admin (encargado SST)</p>
+        {mensaje && <p className="mt-4 text-sm text-emerald-700">{mensaje}</p>}
+        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+
+        <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 leading-5">
+          
+          <p className="mt-2 font-semibold text-zinc-700">Credenciales de referencia:</p>
+          <p>- Invitado: invitado@sst.com / Invitado123</p>
+          <p>- Admin: encargado.sst@empresa.com / E1234</p>
         </div>
       </main>
     </div>

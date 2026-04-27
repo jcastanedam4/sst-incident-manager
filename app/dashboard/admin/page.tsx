@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { supabase } from "@/utils/supabase";
+import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
 import {
   ESTADOS_INCIDENTE,
   normalizarEstado,
@@ -11,7 +11,7 @@ import {
   type AuditLog,
   type EstadoIncidente,
   type Incidente,
-  type UsuarioSimulado,
+  type UsuarioApp,
 } from "@/types/incidentes";
 import { exportarIncidentesExcel, exportarIndicadoresPdf } from "@/utils/reportes";
 
@@ -23,7 +23,7 @@ const COLOR_ESTADO: Record<EstadoIncidente, string> = {
 
 export default function DashboardAdminPage() {
   const router = useRouter();
-  const [usuario, setUsuario] = useState<UsuarioSimulado | null>(null);
+  const [usuario, setUsuario] = useState<UsuarioApp | null>(null);
   const [authCargada, setAuthCargada] = useState(false);
   const [incidentes, setIncidentes] = useState<Incidente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ export default function DashboardAdminPage() {
   const cargarIncidentes = async () => {
     const { data, error: fetchError } = await supabase
       .from("incidentes")
-      .select("id, titulo, descripcion, tipo_peligro, estado, created_at, fecha_suceso, user_email, evidencias(url_storage, tipo_archivo, created_at)")
+      .select("id, user_id, titulo, descripcion, tipo_peligro, estado, created_at, fecha_suceso, ubicacion, evidencias(url_storage, tipo_archivo, created_at)")
       .order("created_at", { ascending: false });
 
     let incidentesCrudos = data as unknown as Incidente[] | null;
@@ -46,7 +46,7 @@ export default function DashboardAdminPage() {
     if (fetchError) {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from("incidentes")
-        .select("id, titulo, descripcion, tipo_peligro, estado, created_at")
+        .select("id, user_id, titulo, descripcion, tipo_peligro, estado, created_at, ubicacion")
         .order("created_at", { ascending: false });
 
       if (fallbackError) {
@@ -66,6 +66,7 @@ export default function DashboardAdminPage() {
       return {
         ...incidente,
         estado: normalizarEstado(incidente.estado),
+        ubicacion: incidente.ubicacion ?? null,
         evidencia_url: incidente.evidencia_url ?? evidenciaReciente?.url_storage ?? null,
       };
     });
@@ -93,20 +94,13 @@ export default function DashboardAdminPage() {
   };
 
   useEffect(() => {
-    const usuarioGuardado = localStorage.getItem("sst_user");
-    if (!usuarioGuardado) {
-      setUsuario(null);
+    const cargarSesion = async () => {
+      const usuarioActual = await obtenerUsuarioSesion();
+      setUsuario(usuarioActual);
       setAuthCargada(true);
-      return;
-    }
+    };
 
-    try {
-      setUsuario(JSON.parse(usuarioGuardado) as UsuarioSimulado);
-    } catch {
-      setUsuario(null);
-    } finally {
-      setAuthCargada(true);
-    }
+    void cargarSesion();
   }, []);
 
   useEffect(() => {
@@ -114,7 +108,12 @@ export default function DashboardAdminPage() {
       return;
     }
 
-    if (!usuario || usuario.rol !== "ADMIN") {
+    if (!usuario) {
+      router.push("/");
+      return;
+    }
+
+    if (usuario.rol !== "ADMIN") {
       router.push("/");
       return;
     }

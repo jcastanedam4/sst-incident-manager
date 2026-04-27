@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { supabase } from "@/utils/supabase";
 
 type NavbarProps = {
   rolActual: "ADMIN" | "EMPLEADO";
@@ -11,10 +12,8 @@ export default function Navbar({ rolActual, correo }: NavbarProps) {
   const router = useRouter();
   const rolVisible = rolActual === "ADMIN" ? "Encargado SST" : "Empleado";
 
-  const cerrarSesion = () => {
-    localStorage.removeItem("sst_user");
-    localStorage.removeItem("sst_role");
-    localStorage.removeItem("sst_email");
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut();
     router.push("/");
   };
 
@@ -31,7 +30,7 @@ export default function Navbar({ rolActual, correo }: NavbarProps) {
 
         <button
           type="button"
-          onClick={cerrarSesion}
+          onClick={() => void cerrarSesion()}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
         >
           Cerrar sesion

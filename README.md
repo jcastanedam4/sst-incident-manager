@@ -1,11 +1,11 @@
 # SST Incident Manager
 
-Prototipo educativo para gestionar reportes SST con dos roles simulados y entrada por login:
+Prototipo educativo para gestionar reportes SST con dos roles y autenticacion real con Supabase Auth:
 
 - Empleado (reportador)
 - Administrador (revisor)
 
-Objetivo de la fase actual: aprender el flujo de datos entre tablas en Supabase sin implementar autenticacion real todavia.
+Objetivo de la fase actual: operar el flujo SST con RLS, bitacora de auditoria y evidencia multimedia en Storage.
 
 ## Tecnologías
 
@@ -52,20 +52,20 @@ npm run dev
 
 ## Flujo funcional implementado
 
-## 1) Login simulado (ruta /)
+## 1) Login con Supabase Auth (ruta /)
 
 - Formulario con correo electronico y contrasena.
-- Cuenta invitado de empleado: invitado(at)sst.com / Invitado123.
-- Cuenta de administrador (Encargado SST): encargado.sst(at)empresa.com / E1234.
-- Opcion de registro local para crear nuevas cuentas de empleado desde la pantalla de login.
-- Si las credenciales son validas, se guarda el objeto de usuario en localStorage bajo la llave sst_user y redirige segun rol.
+- Autenticacion con email/password usando Supabase Auth.
+- Opcion de registro para crear cuentas de empleado con metadata role=EMPLEADO.
+- Para cuentas de administrador debes configurar metadata role=ADMIN en Supabase.
+- Si las credenciales son validas, la app redirige segun rol autenticado.
 - Si fallan, se muestra alerta de credenciales incorrectas.
 
 ## 2) Vista Empleado (ruta /dashboard/empleado)
 
 - Interfaz limpia para reportar incidentes.
 - Campos: Titulo, Descripcion, Tipo de Peligro (GTC 45), y evidencia multimedia.
-- Al enviar se hace INSERT en incidentes con estado Abierto (si el enum/columna en Supabase lo permite).
+- Al enviar se hace INSERT en incidentes con estado Abierto y user_email del usuario autenticado.
 
 ## 3) Vista Administrador (ruta /dashboard/admin)
 
@@ -82,7 +82,7 @@ npm run dev
 
 - Navbar compartida en ambos dashboards.
 - Muestra rol actual y correo simulado.
-- Boton Cerrar sesion: limpia localStorage y regresa al login.
+- Boton Cerrar sesion: ejecuta supabase.auth.signOut() y regresa al login.
 
 ## Estructura principal
 
@@ -195,9 +195,23 @@ FOR EACH ROW EXECUTE FUNCTION fn_audit_incidente_changes();
 
 Nota tecnica:
 
-- En el prototipo actual, el login de la app es simulado con localStorage y no con Supabase Auth.
-- Por lo anterior, `auth.uid()` puede quedar `NULL` si la operacion no se ejecuta con una sesion autenticada de Supabase.
-- Si quieres trazabilidad de usuario final en esta fase, puedes guardar adicionalmente `usuario_email` en `incidentes` y/o pasar el usuario en metadatos de la operacion.
+- Con autenticacion real, auth.uid() se propaga al trigger y la tabla audit_logs registra el usuario que ejecuta la operacion.
+- Configura RLS con base en role del usuario (ADMIN o EMPLEADO) para mantener el control de acceso.
+
+## Carga de datos de prueba (25 incidentes)
+
+Para poblar el sistema con 25 incidentes y evidencias en el bucket evidencias-incidentes:
+
+```bash
+npm run seed:incidentes
+```
+
+Variables requeridas:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=tu_url
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+```
 
 ## Archivos clave del flujo
 

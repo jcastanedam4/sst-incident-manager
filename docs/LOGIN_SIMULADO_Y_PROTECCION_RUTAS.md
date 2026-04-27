@@ -8,6 +8,14 @@ Este documento resume el login simulado vigente en la aplicacion.
 - Cuenta de administrador (Encargado SST): `encargado.sst@empresa.com` / `E1234`.
 - Se habilito registro local de empleados desde la pantalla de login.
 
+## 0) Acceso por rol
+
+- ADMIN: `role=ADMIN` en metadata del usuario desde Supabase.
+- EMPLEADO: `role=EMPLEADO` en metadata o usuario registrado.
+- Credenciales de referencia:
+  - Invitado: `invitado@sst.com` / `Invitado123`.
+  - Admin: `encargado.sst@empresa.com` / `E1234`.
+
 ## 1) Referencia del flujo de ingreso actual
 
 ```tsx

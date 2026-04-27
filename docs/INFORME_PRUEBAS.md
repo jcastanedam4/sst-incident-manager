@@ -1,6 +1,6 @@
 # Informe de Pruebas - SST Incident Manager
 
-Fecha: 26-04-2026
+Fecha: 27-04-2026
 
 ## 1. Objetivo
 
@@ -13,6 +13,7 @@ Establecer una linea base de calidad con pruebas unitarias ejecutadas realmente 
   - `types/incidentes.ts`
   - `utils/reportes.ts`
 - Ejecucion real de comandos de prueba y cobertura.
+- Revision de seguridad de dependencias con `npm audit`.
 
 ## 3. Cambios tecnicos implementados
 
@@ -35,6 +36,12 @@ Casos cubiertos:
 - `normalizarEstado` cubre estados nuevos y legados (`abierto`, `pendiente`, `en_revision`, `en revision`).
 - `exportarIncidentesExcel` valida transformacion de filas y nombre de archivo.
 - `exportarIndicadoresPdf` valida conteos e incluye prueba de paginacion.
+
+### 3.3 Mitigacion de vulnerabilidades
+
+- Exportacion Excel migrada de `xlsx` a `exceljs`.
+- `next` actualizado a `16.2.4`.
+- Overrides agregados para `postcss` y `uuid`.
 
 ## 4. Evidencia de ejecucion real
 
@@ -66,12 +73,23 @@ Cobertura reportada por Vitest (V8):
 - `utils/reportes.ts`: 100% statements/lines/functions, 78.57% branches
 - `utils/supabase.ts`: 0% (fuera del alcance de esta primera base)
 
+### 4.3 Comando
+
+```powershell
+npm audit
+```
+
+Resultado:
+- Vulnerabilidades encontradas: 0
+- Estado: OK
+
 ## 5. Baseline de calidad (semana 10-11)
 
 - Framework unitario operativo: SI
 - Suite unitaria inicial operativa: SI
 - Cobertura global inicial: 91.5%
 - Cobertura de modulos criticos (types/reportes): objetivo cumplido
+- Dependencias sin vulnerabilidades conocidas en la auditoria actual: SI
 
 ## 6. Pruebas funcionales reales pendientes (checklist)
 

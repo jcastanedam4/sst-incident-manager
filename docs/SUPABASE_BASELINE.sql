@@ -15,6 +15,11 @@ create table if not exists public.incidentes (
   updated_at timestamptz not null default now()
 );
 
+alter table public.incidentes
+add column if not exists user_email text;
+
+-- Si ya existia el campo desde una version previa, este alter no hace nada.
+
 -- 2) Tabla de evidencias
 create table if not exists public.evidencias (
   id uuid primary key default gen_random_uuid(),

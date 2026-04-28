@@ -21,6 +21,8 @@ const COLOR_ESTADO: Record<EstadoIncidente, string> = {
   Cerrado: "bg-emerald-100 text-emerald-900",
 };
 
+const INCIDENTES_POR_PAGINA = 10;
+
 export default function DashboardAdminPage() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<UsuarioApp | null>(null);
@@ -34,6 +36,7 @@ export default function DashboardAdminPage() {
   const [medidaCorrectiva, setMedidaCorrectiva] = useState("");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [paginaIncidentes, setPaginaIncidentes] = useState(1);
 
   const cargarIncidentes = async () => {
     const { data, error: fetchError } = await supabase
@@ -220,6 +223,23 @@ export default function DashboardAdminPage() {
     return incidentes.filter((incidente) => incidente.estado === filtroEstado);
   }, [filtroEstado, incidentes]);
 
+  const totalPaginas = Math.max(1, Math.ceil(incidentesFiltrados.length / INCIDENTES_POR_PAGINA));
+
+  const incidentesPaginados = useMemo(() => {
+    const indiceInicio = (paginaIncidentes - 1) * INCIDENTES_POR_PAGINA;
+    return incidentesFiltrados.slice(indiceInicio, indiceInicio + INCIDENTES_POR_PAGINA);
+  }, [incidentesFiltrados, paginaIncidentes]);
+
+  useEffect(() => {
+    setPaginaIncidentes(1);
+  }, [filtroEstado]);
+
+  useEffect(() => {
+    if (paginaIncidentes > totalPaginas) {
+      setPaginaIncidentes(totalPaginas);
+    }
+  }, [paginaIncidentes, totalPaginas]);
+
   const indicadores = useMemo(() => {
     const total = incidentes.length;
     const abiertos = incidentes.filter((incidente) => incidente.estado === "Abierto").length;
@@ -351,7 +371,7 @@ export default function DashboardAdminPage() {
 
             {!loading && incidentesFiltrados.length > 0 && (
               <div className="space-y-3">
-                {incidentesFiltrados.map((incidente) => (
+                {incidentesPaginados.map((incidente) => (
                   <article key={incidente.id} className="rounded-lg border border-zinc-200 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-xs font-semibold uppercase text-zinc-500">Incidente #{incidente.id}</p>
@@ -398,6 +418,36 @@ export default function DashboardAdminPage() {
                     )}
                   </article>
                 ))}
+
+                {incidentesFiltrados.length > INCIDENTES_POR_PAGINA && (
+                  <div className="flex items-center justify-between gap-3 pt-2 text-sm text-zinc-600">
+                    <p>
+                      Mostrando {Math.min(incidentesFiltrados.length, (paginaIncidentes - 1) * INCIDENTES_POR_PAGINA + 1)}-
+                      {Math.min(paginaIncidentes * INCIDENTES_POR_PAGINA, incidentesFiltrados.length)} de {incidentesFiltrados.length}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={paginaIncidentes === 1}
+                        onClick={() => setPaginaIncidentes((actual) => Math.max(1, actual - 1))}
+                        className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Anterior
+                      </button>
+                      <span className="rounded-lg bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-700">
+                        Pagina {paginaIncidentes} de {totalPaginas}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={paginaIncidentes === totalPaginas}
+                        onClick={() => setPaginaIncidentes((actual) => Math.min(totalPaginas, actual + 1))}
+                        className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </section>

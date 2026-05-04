@@ -30,7 +30,7 @@ Alinear el proyecto SST Incident Manager con los RF1-RF10, objetivos del proyect
 - types/incidentes.ts
 - utils/reportes.ts
 
-## Fase 2 - Capa de datos y cumplimiento normativo (Pendiente guiado)
+## Fase 2 - Capa de datos y cumplimiento normativo
 
 1. Confirmar estructura de tablas y columnas para trazabilidad:
 

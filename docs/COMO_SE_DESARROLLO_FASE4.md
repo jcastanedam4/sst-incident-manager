@@ -1,4 +1,4 @@
-# Como se desarrollo la Fase 4 (explicado para aprender)
+# Como se desarrollo la Fase 4
 
 ## Objetivo de esta fase
 

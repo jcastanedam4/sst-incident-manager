@@ -1,6 +1,6 @@
 # SST Incident Manager
 
-Prototipo educativo para gestionar reportes SST con dos roles y autenticacion real con Supabase Auth:
+Prototipo para gestionar reportes SST con dos roles y autenticacion real con Supabase Auth:
 
 - Empleado (reportador)
 - Administrador (revisor)

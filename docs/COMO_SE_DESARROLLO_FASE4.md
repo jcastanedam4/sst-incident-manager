@@ -134,13 +134,6 @@ Consideracion importante:
 - En este prototipo, el acceso esta simulado con localStorage, por lo que `changed_by` puede quedar en `NULL` si no hay sesion de Supabase activa.
 - Para fase de implementacion real, se recomienda migrar el login a Supabase Auth para tener trazabilidad completa por usuario.
 
-## Lo que aprendiste en esta fase
-
-- Como modelar un flujo multi-rol con login simulado por localStorage.
-- Diferencia practica entre `INSERT` y `UPDATE`.
-- Como usar `useState`, `useEffect` y `useRouter` para navegacion por rol.
-- Como conectar UI -> base de datos -> UI nuevamente.
-
 ## Requisitos de tabla esperados
 
 Para que el prototipo funcione, necesitas al menos estas columnas:

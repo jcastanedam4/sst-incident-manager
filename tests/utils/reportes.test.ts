@@ -10,11 +10,13 @@ const excelState: {
 };
 
 const pdfState: {
-  savedFileName: string | null;
+  downloadFileName: string | null;
+  downloadClicks: number;
   pageCount: number;
   textCalls: string[];
 } = {
-  savedFileName: null,
+  downloadFileName: null,
+  downloadClicks: 0,
   pageCount: 1,
   textCalls: [],
 };
@@ -62,8 +64,11 @@ vi.mock("jspdf", () => {
       return undefined;
     }
 
-    save(fileName: string) {
-      pdfState.savedFileName = fileName;
+    output() {
+      return new Blob(["pdf"], { type: "application/pdf" });
+    }
+
+    save() {
       return undefined;
     }
   }
@@ -119,7 +124,8 @@ describe("utils/reportes", () => {
     excelState.rows = [];
     excelState.writeBufferCalls = 0;
 
-    pdfState.savedFileName = null;
+    pdfState.downloadFileName = null;
+    pdfState.downloadClicks = 0;
     pdfState.pageCount = 1;
     pdfState.textCalls = [];
 
@@ -160,9 +166,20 @@ describe("utils/reportes", () => {
   });
 
   it("genera PDF de indicadores con conteos correctos y nombre esperado", () => {
+    const clickSpy = vi.fn();
+    const anchor = {
+      href: "",
+      download: "",
+      click: clickSpy,
+    } as unknown as HTMLAnchorElement;
+
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+
     exportarIndicadoresPdf(incidentesBase);
 
-    expect(pdfState.savedFileName).toBe("indicadores_sst_2026-04-26.pdf");
+    expect(anchor.download).toBe("indicadores_sst_2026-04-26.pdf");
+    expect(anchor.href).toBe("blob:archivo");
+    expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(pdfState.textCalls).toContain("Total de incidentes: 3");
     expect(pdfState.textCalls).toContain("Abiertos: 1");
     expect(pdfState.textCalls).toContain("En Proceso: 1");

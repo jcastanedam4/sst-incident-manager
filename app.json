@@ -1,0 +1,14 @@
+{
+  "appId": "com.jcastanedam4.sstincidentmanager",
+  "appName": "SST Incident Manager",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "android": {
+    "minVersion": 24,
+    "targetVersion": 35,
+    "buildToolsVersion": "35.0.0"
+  },
+  "ios": {
+    "deploymentTarget": "13.0"
+  }
+}

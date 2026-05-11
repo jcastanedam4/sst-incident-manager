@@ -35,32 +35,37 @@ En la pantalla de configuración de build, completa los siguientes campos:
 
 #### 3.2 Configuración del Entorno (Build Parameters)
 
-Si Appflow te pide configuración avanzada, usa:
+En la pestaña de **"Build Configuration"** o **"Advanced"**:
 
 | Campo | Valor |
 |-------|-------|
-| Node version | 20.x o superior |
-| Build command | Verifica que Appflow detecte `npm run build:web` |
+| Node version | `22.x` o superior |
+| Package Manager | `npm` |
+| Build Script | `npm run build:web` |
 | Output directory | `out` |
 
-#### 3.3 Pasos de Build (Build Steps)
+#### 3.3 Build Commands (Crítico para Capacitor)
 
-Appflow debería auto-detectar que es un proyecto Capacitor. Si no, configura manualmente:
+⚠️ **Appflow auto-detecta React Native por defecto. Para Capacitor, debes usar Custom Build Commands:**
 
-1. **Install Dependencies** (si no está)
-   ```
-   npm ci
-   ```
+1. En Appflow, haz clic en **"Advanced"** o **"Build Steps"**
+2. Selecciona **"Custom Script"** o **"Custom Commands"**
+3. Ingresa exactamente estos comandos **en orden**:
 
-2. **Build Web Assets** (crítico)
-   ```
-   npm run build:web
-   ```
+```bash
+npm ci
+npm run build:web
+npx cap sync android
+```
 
-3. **Sync Capacitor Android** (crítico)
-   ```
-   npx cap sync android
-   ```
+**Explicación**:
+- `npm ci` - Instala dependencias exactas de `package-lock.json`
+- `npm run build:web` - Compila Next.js estático a `/out`
+- `npx cap sync android` - Copia assets web a `android/` y sincroniza plugins Capacitor
+
+**Alternative (si Appflow ofrece preset)**:
+- En lugar de "React Native", busca un preset de **"Capacitor"** o **"Ionic"**
+- Si existe, selecciónalo; debería auto-llenar los comandos correctos
 
 #### 3.4 Signing (Firmado del APK)
 
@@ -79,6 +84,18 @@ Si quieres un APK final para distribuir (Google Play):
    - **Key Password**: la contraseña de la key
 
 Si no configuras signing, Appflow te generará un APK sin firmar (solo para pruebas).
+
+### Error: "either app.json or app.config.json is required to identify your React Native app"
+
+**Causa**: Appflow está intentando compilar como React Native en lugar de Capacitor.
+
+**Solución**:
+1. Asegúrate de que existe `app.json` en la raíz del proyecto (verifica en tu repo)
+2. No selecciones "React Native" como framework; usa **"Custom Script"** o **"Ionic/Capacitor"** si está disponible
+3. Ingresa manualmente los 3 comandos de build (ver §3.3 arriba)
+4. Si aún no funciona, contacta al equipo de Appflow indicando que es un proyecto **Next.js + Capacitor**, no React Native
+
+---
 
 ## Paso 4: Lanzar la Build
 

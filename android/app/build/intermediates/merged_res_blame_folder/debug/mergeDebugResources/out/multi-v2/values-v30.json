@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.jcastanedam4.sstincidentmanager.app-mergeDebugResources-42:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\cmont\\.gradle\\caches\\8.14.3\\transforms\\dcfa10bf00869836714b3f9d467f99e0\\transformed\\core-splashscreen-1.2.0\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "7",
+                        "endColumns": "12",
+                        "endOffsets": "433"
+                    }
+                }
+            ]
+        }
+    ]
+}

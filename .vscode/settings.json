@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^\\$env:JAVA_HOME='C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-17\\.0\\.19\\.10-hotspot'; \\$env:ANDROID_SDK_ROOT='C:\\\\Android'; \\$env:PATH=\"\\$env:JAVA_HOME\\\\bin;\\$env:PATH\"; cd C:\\\\Users\\\\cmont\\\\sst-incident-manager\\\\android; \\.\\\\gradlew\\.bat clean assembleDebug$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^\\$adb='C:\\\\Android\\\\platform-tools\\\\adb\\.exe'; Write-Output 'Procesos del emulador:'; Get-Process \\| Where-Object \\{ \\$_\\.ProcessName -like 'emulator\\*' -or \\$_\\.ProcessName -like 'qemu\\*' \\} \\| Select-Object ProcessName,Id,Path \\| Format-Table -AutoSize; Write-Output '---'; & \\$adb devices -l; Write-Output '---'; & \\$adb -s emulator-5554 shell getprop sys\\.boot_completed; Write-Output '---'; & \\$adb -s emulator-5554 shell getprop dev\\.bootcomplete$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

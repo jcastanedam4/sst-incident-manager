@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import Navbar from "@/components/Navbar";
 import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
+import { esAplicacionNativa } from "@/utils/capacitor";
 import { TIPOS_GTC45, obtenerEstadosPersistencia, type UsuarioApp } from "@/types/incidentes";
 
 export default function DashboardEmpleadoPage() {
@@ -17,6 +19,32 @@ export default function DashboardEmpleadoPage() {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const seleccionarFotoNativa = async () => {
+    try {
+      const foto = await Camera.getPhoto({
+        quality: 80,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+      });
+
+      if (!foto.dataUrl) {
+        setError("No fue posible capturar la foto.");
+        return;
+      }
+
+      const respuesta = await fetch(foto.dataUrl);
+      const blob = await respuesta.blob();
+      const archivo = new File([blob], `evidencia_${Date.now()}.jpeg`, {
+        type: blob.type || "image/jpeg",
+      });
+
+      setArchivoAdjunto(archivo);
+      setError(null);
+    } catch {
+      setError("No se pudo abrir la camara del dispositivo.");
+    }
+  };
 
   useEffect(() => {
     const cargarSesion = async () => {
@@ -188,11 +216,19 @@ export default function DashboardEmpleadoPage() {
               <label htmlFor="adjunto" className="mb-1 block text-sm font-medium text-zinc-700">
                 Adjuntar evidencia (foto o archivo)
               </label>
+              {esAplicacionNativa() && (
+                <button
+                  type="button"
+                  onClick={() => void seleccionarFotoNativa()}
+                  className="mb-2 inline-flex items-center rounded-lg border border-blue-300 px-3 py-2 text-xs font-semibold text-blue-800 transition hover:bg-blue-50"
+                >
+                  Tomar foto con camara
+                </button>
+              )}
               <input
                 id="adjunto"
                 type="file"
-                accept="image/*"
-                capture="environment"
+                accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                 onChange={(event) => setArchivoAdjunto(event.target.files?.[0] ?? null)}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
               />

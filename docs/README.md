@@ -10,6 +10,7 @@ Este directorio contiene toda la documentación del proyecto. Aquí está la gu�
 
 ### Guías de Compilación y Despliegue
 - **[APPFLOW_APK_SETUP.md](APPFLOW_APK_SETUP.md)** - Paso a paso para generar APK usando Ionic Appflow (nube)
+- **[IONIC_CLI_SETUP.md](IONIC_CLI_SETUP.md)** - Instalación y uso de Ionic CLI (herramienta oficial Capacitor)
 - **[COMO_SE_DESARROLLO_FASE4.md](COMO_SE_DESARROLLO_FASE4.md)** - Evolución pedagógica de cómo se construyó este proyecto desde cero
 
 ### Funcionalidad y Flujos

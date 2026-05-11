@@ -3,7 +3,7 @@ import type { RolUsuario, UsuarioApp } from "@/types/incidentes";
 
 let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
-const getSupabaseClient = () => {
+const getSupabaseClient = (): ReturnType<typeof createClient> => {
   if (supabaseInstance) return supabaseInstance;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -19,11 +19,12 @@ const getSupabaseClient = () => {
   return supabaseInstance;
 };
 
-export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
-  get: (_, prop) => {
-    return getSupabaseClient()[prop as keyof ReturnType<typeof createClient>];
-  },
-}) as ReturnType<typeof createClient>;
+export const supabase = new Proxy<ReturnType<typeof createClient>>(
+  {} as any,
+  {
+    get: (_, prop) => Reflect.get(getSupabaseClient(), prop),
+  }
+);
 
 const esRolValido = (valor: unknown): valor is RolUsuario => {
   return valor === "ADMIN" || valor === "EMPLEADO";

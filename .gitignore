@@ -44,5 +44,4 @@ android/keystore.properties
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-android/
 build-output.log

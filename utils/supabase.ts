@@ -1,16 +1,29 @@
 import { createClient } from "@supabase/supabase-js";
 import type { RolUsuario, UsuarioApp } from "@/types/incidentes";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Faltan variables de entorno de Supabase. Revisa NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY"
-  );
-}
+const getSupabaseClient = () => {
+  if (supabaseInstance) return supabaseInstance;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Faltan variables de entorno de Supabase. Revisa NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
+  }
+
+  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  return supabaseInstance;
+};
+
+export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get: (_, prop) => {
+    return getSupabaseClient()[prop as keyof ReturnType<typeof createClient>];
+  },
+}) as ReturnType<typeof createClient>;
 
 const esRolValido = (valor: unknown): valor is RolUsuario => {
   return valor === "ADMIN" || valor === "EMPLEADO";

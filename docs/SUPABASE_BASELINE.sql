@@ -1,5 +1,5 @@
 -- Baseline para autenticacion real (Supabase Auth) y RLS por rol.
--- Requiere usuarios autenticados con metadata role: ADMIN o EMPLEADO.
+-- Requiere usuarios autenticados con role en app_metadata o el correo encargado.sst@empresa.com.
 
 -- 1) Tabla de incidentes
 create table if not exists public.incidentes (
@@ -50,7 +50,10 @@ create table if not exists public.audit_logs (
   created_at timestamptz not null default now()
 );
 
--- 5) Trigger de auditoria
+-- Asegurar que changed_by puede ser NULL (no hay restricción FK)
+alter table public.audit_logs alter column changed_by drop not null;
+
+-- 5) Trigger de auditoria - permite NULL para changed_by
 create or replace function public.fn_audit_incidente_changes()
 returns trigger as $$
 begin
@@ -72,7 +75,7 @@ begin
 
   return null;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer;
 
 drop trigger if exists trg_audit_incidentes on public.incidentes;
 
@@ -92,16 +95,25 @@ alter table public.evidencias enable row level security;
 alter table public.medidas_correctivas enable row level security;
 alter table public.audit_logs enable row level security;
 
+-- Helper central para no repetir logica de admin
+create or replace function public.is_admin_user()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '') = 'ADMIN'
+     or auth.email() = 'encargado.sst@empresa.com';
+$$;
+
+-- Incidentes: lectura para admin y dueño; insercion para el usuario autenticado; escritura solo admin
 drop policy if exists "incidentes_select" on public.incidentes;
 create policy "incidentes_select"
 on public.incidentes
 for select
 to authenticated
 using (
-  coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-  or auth.email() = 'encargado.sst@empresa.com'
+  public.is_admin_user()
   or user_email = auth.email()
-  or (user_id is not null and user_id::text = auth.uid()::text)
 );
 
 drop policy if exists "incidentes_insert" on public.incidentes;
@@ -119,13 +131,17 @@ create policy "incidentes_update_admin"
 on public.incidentes
 for update
 to authenticated
-using (
-  coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-)
-with check (
-  coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-);
+using (public.is_admin_user())
+with check (public.is_admin_user());
 
+drop policy if exists "incidentes_delete_admin" on public.incidentes;
+create policy "incidentes_delete_admin"
+on public.incidentes
+for delete
+to authenticated
+using (public.is_admin_user());
+
+-- Evidencias: lectura para admin y dueño del incidente; insercion para usuario autenticado sobre su incidente
 drop policy if exists "evidencias_select" on public.evidencias;
 create policy "evidencias_select"
 on public.evidencias
@@ -137,7 +153,7 @@ using (
     from public.incidentes i
     where i.id = evidencias.incidente_id
       and (
-        coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
+        public.is_admin_user()
         or i.user_email = auth.email()
       )
   )
@@ -154,55 +170,69 @@ with check (
     from public.incidentes i
     where i.id = evidencias.incidente_id
       and (
-        coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
+        public.is_admin_user()
         or i.user_email = auth.email()
       )
   )
 );
 
+-- Medidas correctivas: solo admin puede leer/escribir
 drop policy if exists "medidas_select" on public.medidas_correctivas;
 create policy "medidas_select"
 on public.medidas_correctivas
 for select
 to authenticated
-using (
-  coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-);
+using (public.is_admin_user());
 
 drop policy if exists "medidas_insert_admin" on public.medidas_correctivas;
 create policy "medidas_insert_admin"
 on public.medidas_correctivas
 for insert
 to authenticated
-with check (
-  coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-);
+with check (public.is_admin_user());
 
+drop policy if exists "medidas_update_admin" on public.medidas_correctivas;
+create policy "medidas_update_admin"
+on public.medidas_correctivas
+for update
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "medidas_delete_admin" on public.medidas_correctivas;
+create policy "medidas_delete_admin"
+on public.medidas_correctivas
+for delete
+to authenticated
+using (public.is_admin_user());
+
+-- Audit logs: solo admin puede leer; los inserts los realiza el trigger de incidentes
 drop policy if exists "audit_logs_insert_from_trigger" on public.audit_logs;
 create policy "audit_logs_insert_from_trigger"
 on public.audit_logs
 for insert
 to authenticated
-with check (changed_by = auth.uid());
+with check (true);
 
 drop policy if exists "audit_logs_select_admin" on public.audit_logs;
 create policy "audit_logs_select_admin"
 on public.audit_logs
 for select
 to authenticated
-using (
-  coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-);
+using (public.is_admin_user());
 
--- 8) Storage (ejecutar en SQL Editor si usas bucket evidencias-incidentes)
--- create policy "storage_evidencias_read"
--- on storage.objects
--- for select
--- to authenticated
--- using (bucket_id = 'evidencias-incidentes');
---
--- create policy "storage_evidencias_insert"
--- on storage.objects
--- for insert
--- to authenticated
--- with check (bucket_id = 'evidencias-incidentes');
+-- 8) Storage: bucket de evidencias
+-- Si usas evidencia multimedia, estas policies son necesarias para subir/leer archivos en el bucket.
+drop policy if exists "storage_evidencias_read" on storage.objects;
+create policy "storage_evidencias_read"
+on storage.objects
+for select
+to authenticated
+using (bucket_id = 'evidencias-incidentes');
+
+drop policy if exists "storage_evidencias_insert" on storage.objects;
+create policy "storage_evidencias_insert"
+on storage.objects
+for insert
+to authenticated
+with check (bucket_id = 'evidencias-incidentes');

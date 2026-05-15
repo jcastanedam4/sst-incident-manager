@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import Navbar from "@/components/Navbar";
@@ -46,6 +46,47 @@ export default function DashboardEmpleadoPage() {
     }
   };
 
+  const seleccionarFotoWeb = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setError("La cámara no está disponible en este navegador.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const video = document.createElement("video");
+      video.autoplay = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+
+      await new Promise((res) => (video.onloadedmetadata = res));
+      // esperar un frame para que la cámara ajuste
+      await new Promise((r) => setTimeout(r, 250));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("No es posible acceder al canvas");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // detener tracks
+      stream.getTracks().forEach((t) => t.stop());
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+      if (!blob) {
+        setError("No fue posible capturar la imagen.");
+        return;
+      }
+
+      const archivo = new File([blob], `evidencia_${Date.now()}.jpg`, { type: "image/jpeg" });
+      setArchivoAdjunto(archivo);
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message ?? "Error al acceder a la cámara");
+    }
+  };
+
   useEffect(() => {
     const cargarSesion = async () => {
       const usuarioActual = await obtenerUsuarioSesion();
@@ -55,6 +96,8 @@ export default function DashboardEmpleadoPage() {
 
     void cargarSesion();
   }, []);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!authCargada) {
@@ -133,17 +176,26 @@ export default function DashboardEmpleadoPage() {
 
       const { data: publicUrlData } = supabase.storage.from("evidencias-incidentes").getPublicUrl(subidaData.path);
 
-      const { error: insertEvidenciaError } = await supabase.from("evidencias").insert({
-        incidente_id: incidenteCreado.id,
-        url_storage: publicUrlData.publicUrl,
-        tipo_archivo: archivoAdjunto.type || "application/octet-stream",
-      });
+      // Registrar evidencia vía endpoint servidor para evitar RLS en cliente
+      try {
+        const resp = await fetch("/api/evidencias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            incidente_id: incidenteCreado.id,
+            url_storage: publicUrlData.publicUrl,
+            tipo_archivo: archivoAdjunto.type || "application/octet-stream",
+          }),
+        });
 
-      if (insertEvidenciaError) {
-        mensajeResultado =
-          "Incidente y archivo cargados, pero no se pudo registrar evidencia en la tabla evidencias.";
-      } else {
-        mensajeResultado = "Incidente enviado con evidencia multimedia.";
+        const json = await resp.json();
+        if (!resp.ok) {
+          mensajeResultado = "Incidente creado, pero fallo la evidencia: " + (json.error ?? resp.statusText);
+        } else {
+          mensajeResultado = "Incidente enviado con evidencia multimedia.";
+        }
+      } catch (e: any) {
+        mensajeResultado = "Incidente creado, pero fallo la evidencia: " + (e?.message ?? String(e));
       }
     }
 
@@ -219,22 +271,31 @@ export default function DashboardEmpleadoPage() {
               <label htmlFor="adjunto" className="mb-1 block text-sm font-medium text-zinc-700">
                 Adjuntar evidencia (foto o archivo)
               </label>
-              {esAplicacionNativa() && (
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => void seleccionarFotoNativa()}
-                  className="mb-2 inline-flex items-center rounded-lg border border-blue-300 px-3 py-2 text-xs font-semibold text-blue-800 transition hover:bg-blue-50"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-900 bg-white hover:bg-zinc-50"
                 >
-                  Tomar foto con camara
+                  Adjuntar archivo
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => void (esAplicacionNativa() ? seleccionarFotoNativa() : seleccionarFotoWeb())}
+                  className="inline-flex items-center rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-800 bg-white hover:bg-blue-50"
+                >
+                  Tomar foto
+                </button>
+              </div>
+
               <input
                 id="adjunto"
+                ref={fileInputRef}
                 type="file"
                 accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                 onChange={(event) => setArchivoAdjunto(event.target.files?.[0] ?? null)}
-                style={{ color: "#111827", WebkitTextFillColor: "#111827" }}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                style={{ display: "none" }}
               />
               {archivoAdjunto && (
                 <p className="mt-1 text-xs text-zinc-500">Archivo seleccionado: {archivoAdjunto.name}</p>

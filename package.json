@@ -25,19 +25,24 @@
     "seed:incidentes": "node scripts/seed-incidentes-storage.mjs"
   },
   "dependencies": {
+    "@babel/types": "7.29.0",
     "@capacitor/android": "^8.3.3",
     "@capacitor/camera": "^8.2.0",
     "@capacitor/cli": "^8.3.3",
     "@capacitor/core": "^8.3.3",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/share": "^8.0.1",
+    "@supabase/auth-js": "2.105.4",
     "@supabase/supabase-js": "^2.101.1",
+    "@swc/helpers": "^0.5.21",
+    "browserslist": "^4.28.2",
+    "caniuse-lite": "1.0.30001740",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -46,7 +51,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^3.2.4",
-    "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "jsdom": "^29.1.0",

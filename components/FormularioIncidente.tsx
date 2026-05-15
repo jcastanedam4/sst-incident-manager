@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { supabase } from "@/utils/supabase";
+import { supabase, obtenerUsuarioSesion } from "@/utils/supabase";
 import { obtenerEstadosPersistencia } from "@/types/incidentes";
 
 const TIPOS_GTC45 = [
@@ -32,15 +32,19 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
     setMensaje(null);
     setError(null);
 
-    // ESCRITURA (INSERT): guardamos un incidente nuevo en la tabla incidentes.
+    // Obtener usuario autenticado para asociar email (necesario para RLS)
+    const usuario = await obtenerUsuarioSesion();
     const [estadoPersistencia] = obtenerEstadosPersistencia("Abierto");
-    const { error: insertError } = await supabase.from("incidentes").insert({
+
+    // ESCRITURA (INSERT): guardamos un incidente nuevo en la tabla incidentes.
+    const { error: insertError, data: insertData } = await supabase.from("incidentes").insert({
       titulo,
       descripcion,
       tipo_peligro: tipoPeligro,
       estado: estadoPersistencia,
       fecha_suceso: new Date().toISOString(),
-    });
+      user_email: usuario?.email ?? null,
+    }).select('id').single();
 
     if (insertError) {
       setError(`No se pudo guardar el incidente: ${insertError.message}`);
@@ -48,10 +52,60 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
       return;
     }
 
+    const incidenteId = insertData?.id as string | undefined;
+
+    // Si hay archivo, subimos a storage y registramos en tabla evidencias
+    if (archivoAdjunto && incidenteId) {
+      const nombreSeguro = archivoAdjunto.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
+      const rutaArchivo = `incidentes/${incidenteId}/${Date.now()}_${nombreSeguro}`;
+
+      const { data: subidaData, error: uploadError } = await supabase.storage
+        .from("evidencias-incidentes")
+        .upload(rutaArchivo, archivoAdjunto, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        setError(`Incidente creado, pero fallo la evidencia: ${uploadError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from("evidencias-incidentes").getPublicUrl(subidaData.path);
+
+      // Insert evidence record via server endpoint (uses service role to avoid RLS issues)
+      try {
+        const resp = await fetch("/api/evidencias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            incidente_id: incidenteId,
+            url_storage: publicUrlData.publicUrl,
+            tipo_archivo: archivoAdjunto.type || "application/octet-stream",
+          }),
+        });
+
+        const result = await resp.json();
+        if (!resp.ok) {
+          setError(`Incidente creado, pero fallo la evidencia: ${result.error ?? resp.statusText}`);
+          setLoading(false);
+          return;
+        }
+
+        setMensaje("Incidente enviado con evidencia multimedia.");
+      } catch (e: any) {
+        setError(`Incidente creado, pero fallo la evidencia: ${e?.message ?? String(e)}`);
+        setLoading(false);
+        return;
+      }
+    } else {
+      setMensaje("Incidente enviado con estado Abierto.");
+    }
+
     setTitulo("");
     setDescripcion("");
     setTipoPeligro(TIPOS_GTC45[0]);
-    setMensaje("Incidente enviado con estado Abierto.");
     setLoading(false);
     onIncidenteCreado?.();
   };

@@ -14,7 +14,7 @@ import {
   type UsuarioApp,
 } from "@/types/incidentes";
 import { exportarIncidentesExcel, exportarIndicadoresPdf } from "@/utils/reportes";
-import { useState } from "react";
+import ExportButtons from "./ExportButtons";
 
 const COLOR_ESTADO: Record<EstadoIncidente, string> = {
   Abierto: "bg-amber-100 text-amber-900",

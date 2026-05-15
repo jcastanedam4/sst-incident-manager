@@ -110,13 +110,8 @@ on public.incidentes
 for insert
 to authenticated
 with check (
-  (
-    coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'ADMIN'
-  )
-  or (
-    coalesce(auth.jwt() -> 'user_metadata' ->> 'role', auth.jwt() -> 'app_metadata' ->> 'role') = 'EMPLEADO'
-    and user_email = auth.email()
-  )
+  auth.email() is not null
+  and user_email = auth.email()
 );
 
 drop policy if exists "incidentes_update_admin" on public.incidentes;

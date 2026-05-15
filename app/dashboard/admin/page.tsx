@@ -14,6 +14,7 @@ import {
   type UsuarioApp,
 } from "@/types/incidentes";
 import { exportarIncidentesExcel, exportarIndicadoresPdf } from "@/utils/reportes";
+import { useState } from "react";
 
 const COLOR_ESTADO: Record<EstadoIncidente, string> = {
   Abierto: "bg-amber-100 text-amber-900",
@@ -278,20 +279,7 @@ export default function DashboardAdminPage() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-xl font-bold text-zinc-900">Indicadores de accidentalidad</h2>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void exportarIndicadoresPdf(incidentes)}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
-                >
-                  Exportar PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void exportarIncidentesExcel(incidentes)}
-                  className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700"
-                >
-                  Exportar Excel
-                </button>
+                <ExportButtons incidentes={incidentes} />
               </div>
             </div>
 

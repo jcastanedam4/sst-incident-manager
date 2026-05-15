@@ -45,3 +45,4 @@ android/keystore.properties
 *.tsbuildinfo
 next-env.d.ts
 build-output.log
+.env*.local

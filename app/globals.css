@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Forzar color de texto en campos de formulario para evitar temas/autofill que lo pongan en blanco */
+input,
+textarea,
+select {
+  color: #111827 !important;
+  caret-color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+}
+
+/* Placeholder más legible */
+::placeholder {
+  color: #9CA3AF !important;
+}
+
+/* Autofill (Chrome) */
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #111827 !important;
+  box-shadow: 0 0 0px 1000px var(--background) inset !important;
+}

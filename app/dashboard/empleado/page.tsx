@@ -174,6 +174,7 @@ export default function DashboardEmpleadoPage() {
                 required
                 value={titulo}
                 onChange={(event) => setTitulo(event.target.value)}
+                style={{ color: "#111827", WebkitTextFillColor: "#111827", caretColor: "#111827" }}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                 placeholder="Ejemplo: Piso humedo en pasillo principal"
               />
@@ -189,6 +190,7 @@ export default function DashboardEmpleadoPage() {
                 rows={4}
                 value={descripcion}
                 onChange={(event) => setDescripcion(event.target.value)}
+                style={{ color: "#111827", WebkitTextFillColor: "#111827", caretColor: "#111827" }}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                 placeholder="Describe el incidente y el riesgo asociado."
               />
@@ -202,6 +204,7 @@ export default function DashboardEmpleadoPage() {
                 id="tipoPeligro"
                 value={tipoPeligro}
                 onChange={(event) => setTipoPeligro(event.target.value)}
+                style={{ color: "#111827", WebkitTextFillColor: "#111827", caretColor: "#111827" }}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
               >
                 {TIPOS_GTC45.map((tipo) => (
@@ -230,6 +233,7 @@ export default function DashboardEmpleadoPage() {
                 type="file"
                 accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                 onChange={(event) => setArchivoAdjunto(event.target.files?.[0] ?? null)}
+                style={{ color: "#111827", WebkitTextFillColor: "#111827" }}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
               />
               {archivoAdjunto && (

@@ -72,7 +72,7 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
             required
             value={titulo}
             onChange={(event) => setTitulo(event.target.value)}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
             placeholder="Ejemplo: Derrame en zona de bodega"
           />
         </div>
@@ -87,7 +87,7 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
             rows={4}
             value={descripcion}
             onChange={(event) => setDescripcion(event.target.value)}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
             placeholder="Describe que ocurrio, donde y que riesgo observaste."
           />
         </div>

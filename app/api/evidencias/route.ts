@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import supabaseAdmin from "@/utils/supabaseAdmin";
+import { getSupabaseAdmin } from "@/utils/supabaseAdmin";
 
 export async function POST(request: Request) {
   try {
@@ -9,6 +9,8 @@ export async function POST(request: Request) {
     if (!incidente_id || !url_storage) {
       return NextResponse.json({ error: "Missing incidente_id or url_storage" }, { status: 400 });
     }
+
+    const supabaseAdmin = getSupabaseAdmin();
 
     const { error } = await supabaseAdmin.from("evidencias").insert({
       incidente_id,

@@ -25,6 +25,7 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

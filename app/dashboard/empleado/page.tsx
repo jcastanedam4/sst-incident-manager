@@ -43,6 +43,17 @@ const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
 
   return archivo;
 };
+
+const parsearRespuestaApi = async (resp: Response): Promise<any> => {
+  const contentType = resp.headers.get("content-type") || "";
+  const raw = await resp.text();
+
+  if (contentType.includes("application/json")) {
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  return { error: raw.slice(0, 240) };
+};
 import { TIPOS_GTC45, obtenerEstadosPersistencia, type UsuarioApp } from "@/types/incidentes";
 
 export default function DashboardEmpleadoPage() {
@@ -226,9 +237,10 @@ export default function DashboardEmpleadoPage() {
           }),
         });
 
-        const json = await resp.json();
+        const json = await parsearRespuestaApi(resp);
         if (!resp.ok) {
-          mensajeResultado = "Incidente creado, pero fallo la evidencia: " + (json.error ?? resp.statusText);
+          const detalle = typeof json?.error === "string" ? json.error : resp.statusText;
+          mensajeResultado = "Incidente creado, pero fallo la evidencia: " + detalle;
         } else {
           mensajeResultado = "Incidente enviado con evidencia multimedia.";
         }

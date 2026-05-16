@@ -51,6 +51,17 @@ const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
   return archivo;
 };
 
+const parsearRespuestaApi = async (resp: Response): Promise<any> => {
+  const contentType = resp.headers.get("content-type") || "";
+  const raw = await resp.text();
+
+  if (contentType.includes("application/json")) {
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  return { error: raw.slice(0, 240) };
+};
+
 type FormularioIncidenteProps = {
   onIncidenteCreado?: () => void;
 };
@@ -125,9 +136,10 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
           }),
         });
 
-        const result = await resp.json();
+        const result = await parsearRespuestaApi(resp);
         if (!resp.ok) {
-          setError(`Incidente creado, pero fallo la evidencia: ${result.error ?? resp.statusText}`);
+          const detalle = typeof result?.error === "string" ? result.error : resp.statusText;
+          setError(`Incidente creado, pero fallo la evidencia: ${detalle}`);
           setLoading(false);
           return;
         }

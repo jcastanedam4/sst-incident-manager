@@ -22,7 +22,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "seed:incidentes": "node scripts/seed-incidentes-storage.mjs"
+    "seed:incidentes": "node scripts/seed-incidentes-storage.mjs",
+    "backfill:evidencias": "node scripts/backfill-evidencias-from-storage.mjs"
   },
   "dependencies": {
     "@babel/types": "7.29.0",

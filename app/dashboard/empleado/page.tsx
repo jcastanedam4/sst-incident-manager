@@ -6,6 +6,43 @@ import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import Navbar from "@/components/Navbar";
 import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
 import { esAplicacionNativa } from "@/utils/capacitor";
+
+const convertirWebpAJpeg = async (archivo: File): Promise<File> => {
+  const bitmap = await createImageBitmap(archivo);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return archivo;
+
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((resultado) => resolve(resultado), "image/jpeg", 0.92);
+  });
+
+  if (!blob) return archivo;
+
+  const nombreBase = archivo.name.replace(/\.[^.]+$/, "");
+  return new File([blob], `${nombreBase}.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+};
+
+const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
+  if (archivo.type === "image/webp") {
+    try {
+      return await convertirWebpAJpeg(archivo);
+    } catch {
+      return archivo;
+    }
+  }
+
+  return archivo;
+};
 import { TIPOS_GTC45, obtenerEstadosPersistencia, type UsuarioApp } from "@/types/incidentes";
 
 export default function DashboardEmpleadoPage() {
@@ -158,12 +195,13 @@ export default function DashboardEmpleadoPage() {
     let mensajeResultado = "Incidente enviado en estado Abierto.";
 
     if (archivoAdjunto && incidenteCreado?.id) {
-      const nombreSeguro = archivoAdjunto.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
+        const archivoParaSubida = await normalizarArchivoParaSubida(archivoAdjunto);
+        const nombreSeguro = archivoParaSubida.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
       const rutaArchivo = `incidentes/${incidenteCreado.id}/${Date.now()}_${nombreSeguro}`;
 
       const { data: subidaData, error: uploadError } = await supabase.storage
         .from("evidencias-incidentes")
-        .upload(rutaArchivo, archivoAdjunto, {
+          .upload(rutaArchivo, archivoParaSubida, {
           cacheControl: "3600",
           upsert: false,
         });
@@ -184,7 +222,7 @@ export default function DashboardEmpleadoPage() {
           body: JSON.stringify({
             incidente_id: incidenteCreado.id,
             url_storage: publicUrlData.publicUrl,
-            tipo_archivo: archivoAdjunto.type || "application/octet-stream",
+            tipo_archivo: archivoParaSubida.type || "application/octet-stream",
           }),
         });
 

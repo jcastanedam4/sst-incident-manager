@@ -14,6 +14,43 @@ const TIPOS_GTC45 = [
   "Fenomeno natural",
 ] as const;
 
+const convertirWebpAJpeg = async (archivo: File): Promise<File> => {
+  const bitmap = await createImageBitmap(archivo);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return archivo;
+
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((resultado) => resolve(resultado), "image/jpeg", 0.92);
+  });
+
+  if (!blob) return archivo;
+
+  const nombreBase = archivo.name.replace(/\.[^.]+$/, "");
+  return new File([blob], `${nombreBase}.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+};
+
+const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
+  if (archivo.type === "image/webp") {
+    try {
+      return await convertirWebpAJpeg(archivo);
+    } catch {
+      return archivo;
+    }
+  }
+
+  return archivo;
+};
+
 type FormularioIncidenteProps = {
   onIncidenteCreado?: () => void;
 };
@@ -57,12 +94,13 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
 
     // Si hay archivo, subimos a storage y registramos en tabla evidencias
     if (archivoAdjunto && incidenteId) {
-      const nombreSeguro = archivoAdjunto.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
+      const archivoParaSubida = await normalizarArchivoParaSubida(archivoAdjunto);
+      const nombreSeguro = archivoParaSubida.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
       const rutaArchivo = `incidentes/${incidenteId}/${Date.now()}_${nombreSeguro}`;
 
       const { data: subidaData, error: uploadError } = await supabase.storage
         .from("evidencias-incidentes")
-        .upload(rutaArchivo, archivoAdjunto, {
+        .upload(rutaArchivo, archivoParaSubida, {
           cacheControl: "3600",
           upsert: false,
         });
@@ -83,7 +121,7 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
           body: JSON.stringify({
             incidente_id: incidenteId,
             url_storage: publicUrlData.publicUrl,
-            tipo_archivo: archivoAdjunto.type || "application/octet-stream",
+            tipo_archivo: archivoParaSubida.type || "application/octet-stream",
           }),
         });
 

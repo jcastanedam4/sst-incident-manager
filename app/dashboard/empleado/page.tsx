@@ -32,6 +32,36 @@ const convertirWebpAJpeg = async (archivo: File): Promise<File> => {
   });
 };
 
+const inferirContentTypeDesdeNombre = (archivo: File): string => {
+  const extension = archivo.name.split(".").pop()?.toLowerCase() ?? "";
+
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "txt":
+      return "text/plain";
+    case "md":
+      return "text/markdown";
+    default:
+      return archivo.type || "application/octet-stream";
+  }
+};
+
 const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
   if (archivo.type === "image/webp") {
     try {
@@ -41,7 +71,49 @@ const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
     }
   }
 
+  if (!archivo.type || archivo.type === "application/octet-stream") {
+    const contentType = inferirContentTypeDesdeNombre(archivo);
+    if (contentType !== archivo.type) {
+      return new File([archivo], archivo.name, {
+        type: contentType,
+        lastModified: archivo.lastModified,
+      });
+    }
+  }
+
   return archivo;
+};
+
+const obtenerContentTypeEvidencia = (archivo: File): string => {
+  if (archivo.type && archivo.type !== "application/octet-stream") {
+    return archivo.type;
+  }
+
+  const extension = archivo.name.split(".").pop()?.toLowerCase() ?? "";
+
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "txt":
+      return "text/plain";
+    default:
+      return archivo.type || "application/octet-stream";
+  }
 };
 
 const parsearRespuestaApi = async (resp: Response): Promise<any> => {
@@ -209,12 +281,14 @@ export default function DashboardEmpleadoPage() {
         const archivoParaSubida = await normalizarArchivoParaSubida(archivoAdjunto);
         const nombreSeguro = archivoParaSubida.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
       const rutaArchivo = `incidentes/${incidenteCreado.id}/${Date.now()}_${nombreSeguro}`;
+      const contentType = obtenerContentTypeEvidencia(archivoParaSubida);
 
       const { data: subidaData, error: uploadError } = await supabase.storage
         .from("evidencias-incidentes")
           .upload(rutaArchivo, archivoParaSubida, {
           cacheControl: "3600",
           upsert: false,
+          contentType,
         });
 
       if (uploadError) {
@@ -225,22 +299,15 @@ export default function DashboardEmpleadoPage() {
 
       const { data: publicUrlData } = supabase.storage.from("evidencias-incidentes").getPublicUrl(subidaData.path);
 
-      // Registrar evidencia vía endpoint servidor para evitar RLS en cliente
       try {
-        const resp = await fetch("/api/evidencias", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            incidente_id: incidenteCreado.id,
-            url_storage: publicUrlData.publicUrl,
-            tipo_archivo: archivoParaSubida.type || "application/octet-stream",
-          }),
+        const { error: evidenciaError } = await supabase.from("evidencias").insert({
+          incidente_id: incidenteCreado.id,
+          url_storage: publicUrlData.publicUrl,
+          tipo_archivo: contentType,
         });
 
-        const json = await parsearRespuestaApi(resp);
-        if (!resp.ok) {
-          const detalle = typeof json?.error === "string" ? json.error : resp.statusText;
-          mensajeResultado = "Incidente creado, pero fallo la evidencia: " + detalle;
+        if (evidenciaError) {
+          mensajeResultado = "Incidente creado, pero fallo la evidencia: " + evidenciaError.message;
         } else {
           mensajeResultado = "Incidente enviado con evidencia multimedia.";
         }
@@ -343,7 +410,7 @@ export default function DashboardEmpleadoPage() {
                 id="adjunto"
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx"
                 onChange={(event) => setArchivoAdjunto(event.target.files?.[0] ?? null)}
                 style={{ display: "none" }}
               />

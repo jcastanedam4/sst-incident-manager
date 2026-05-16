@@ -1,11 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import type { RolUsuario, UsuarioApp } from "@/types/incidentes";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// El cliente se crea con valores placeholder si no están disponibles (durante build/SSG)
-// En runtime del navegador, las variables estarán disponibles gracias a Next.js
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    `Missing Supabase credentials: NEXT_PUBLIC_SUPABASE_URL=${!!supabaseUrl}, NEXT_PUBLIC_SUPABASE_ANON_KEY=${!!supabaseAnonKey}. Check your .env.local`
+  );
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const esRolValido = (valor: unknown): valor is RolUsuario => {

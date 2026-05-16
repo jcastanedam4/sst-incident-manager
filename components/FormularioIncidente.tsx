@@ -39,6 +39,36 @@ const convertirWebpAJpeg = async (archivo: File): Promise<File> => {
   });
 };
 
+const inferirContentTypeDesdeNombre = (archivo: File): string => {
+  const extension = archivo.name.split(".").pop()?.toLowerCase() ?? "";
+
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "txt":
+      return "text/plain";
+    case "md":
+      return "text/markdown";
+    default:
+      return archivo.type || "application/octet-stream";
+  }
+};
+
 const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
   if (archivo.type === "image/webp") {
     try {
@@ -48,7 +78,49 @@ const normalizarArchivoParaSubida = async (archivo: File): Promise<File> => {
     }
   }
 
+  if (!archivo.type || archivo.type === "application/octet-stream") {
+    const contentType = inferirContentTypeDesdeNombre(archivo);
+    if (contentType !== archivo.type) {
+      return new File([archivo], archivo.name, {
+        type: contentType,
+        lastModified: archivo.lastModified,
+      });
+    }
+  }
+
   return archivo;
+};
+
+const obtenerContentTypeEvidencia = (archivo: File): string => {
+  if (archivo.type && archivo.type !== "application/octet-stream") {
+    return archivo.type;
+  }
+
+  const extension = archivo.name.split(".").pop()?.toLowerCase() ?? "";
+
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "txt":
+      return "text/plain";
+    default:
+      return archivo.type || "application/octet-stream";
+  }
 };
 
 const parsearRespuestaApi = async (resp: Response): Promise<any> => {
@@ -108,12 +180,14 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
       const archivoParaSubida = await normalizarArchivoParaSubida(archivoAdjunto);
       const nombreSeguro = archivoParaSubida.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9._-]/g, "");
       const rutaArchivo = `incidentes/${incidenteId}/${Date.now()}_${nombreSeguro}`;
+      const contentType = obtenerContentTypeEvidencia(archivoParaSubida);
 
       const { data: subidaData, error: uploadError } = await supabase.storage
         .from("evidencias-incidentes")
         .upload(rutaArchivo, archivoParaSubida, {
           cacheControl: "3600",
           upsert: false,
+          contentType,
         });
 
       if (uploadError) {
@@ -124,22 +198,15 @@ export default function FormularioIncidente({ onIncidenteCreado }: FormularioInc
 
       const { data: publicUrlData } = supabase.storage.from("evidencias-incidentes").getPublicUrl(subidaData.path);
 
-      // Insert evidence record via server endpoint (uses service role to avoid RLS issues)
       try {
-        const resp = await fetch("/api/evidencias", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            incidente_id: incidenteId,
-            url_storage: publicUrlData.publicUrl,
-            tipo_archivo: archivoParaSubida.type || "application/octet-stream",
-          }),
+        const { error: evidenciaError } = await supabase.from("evidencias").insert({
+          incidente_id: incidenteId,
+          url_storage: publicUrlData.publicUrl,
+          tipo_archivo: contentType,
         });
 
-        const result = await parsearRespuestaApi(resp);
-        if (!resp.ok) {
-          const detalle = typeof result?.error === "string" ? result.error : resp.statusText;
-          setError(`Incidente creado, pero fallo la evidencia: ${detalle}`);
+        if (evidenciaError) {
+          setError(`Incidente creado, pero fallo la evidencia: ${evidenciaError.message}`);
           setLoading(false);
           return;
         }

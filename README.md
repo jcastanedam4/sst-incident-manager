@@ -222,6 +222,21 @@ SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
 - [utils/supabase.ts](utils/supabase.ts)
 - [docs/COMO_SE_DESARROLLO_FASE4.md](docs/COMO_SE_DESARROLLO_FASE4.md)
 
+## Formatos de evidencia soportados
+
+La aplicación acepta y almacena evidencias multimedia en el bucket de Storage. Formatos soportados por el flujo actual:
+
+- Imágenes: `image/jpeg`, `image/png`.
+- `image/webp` — se convierte a JPEG en el cliente antes de subir.
+- Documentos: `application/pdf`.
+- Ofimática: `.doc`, `.docx`, `.xls`, `.xlsx` (se suben con su content-type correspondiente si el navegador lo provee).
+
+Notas:
+
+- Siempre se intenta inferir y pasar `contentType` explícito al subir a Storage.
+- Si el navegador reporta `application/octet-stream` o un tipo no soportado, el cliente intenta normalizar el archivo o rechaza la subida mostrando un mensaje claro al usuario.
+- Actualiza las políticas del bucket y RLS en Supabase si añades más formatos.
+
 ## Documentación de apoyo
 
 - Organización del proyecto: [docs/ORGANIZACION_PROYECTO.md](docs/ORGANIZACION_PROYECTO.md)

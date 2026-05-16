@@ -81,7 +81,9 @@ export async function POST(request: Request) {
 
     const pdf = crearPdfBasico(lineas);
 
-    return new NextResponse(pdf, {
+    const bytes = new Uint8Array(pdf);
+
+    return new NextResponse(bytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

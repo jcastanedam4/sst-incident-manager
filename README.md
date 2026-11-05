@@ -1,3 +1,9 @@
+<div align="center">
+  
+[🌐 Demo en vivo](https://sst-incident-manager.vercel.app/)
+</div>
+
+
 # SST Incident Manager
 
 Prototipo para gestionar reportes SST con dos roles y autenticacion real con Supabase Auth:

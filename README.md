@@ -1,9 +1,3 @@
-<div align="center">
-  
-[🌐 Demo en vivo](https://sst-incident-manager.vercel.app/)
-</div>
-
-
 # SST Incident Manager
 
 Prototipo para gestionar reportes SST con dos roles y autenticacion real con Supabase Auth:
@@ -55,6 +49,30 @@ npm run dev
 - npm run build: build de producción
 - npm run start: ejecutar build
 - npm run lint: validación con ESLint
+
+## Corte vertical SST (RF-01 y RF-02)
+
+Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `IncidentRepository` -> Supabase.
+
+- RF-01 (prioridad 1): registrar y clasificar un incidente (tipo de peligro GTC 45 + gravedad). La prioridad y la atencion inmediata se calculan SOLO en `lib/incidentes/evaluadorRiesgo.ts`.
+- RF-02 (prioridad 2): consultar un incidente clasificado por su identificador.
+- Fuera de alcance: notificaciones SMS/correo, reevaluacion por medico ocupacional, Machine Learning, gestion de brigadistas, panel administrativo avanzado.
+
+### Estructura
+- `lib/incidentes/`: validacion, matriz de riesgo, servicio, contrato y repositorio Supabase.
+- `app/api/v1/incidentes/`: endpoints.
+- `components/ReportarIncidente.tsx`, `ConsultaIncidente.tsx`: interfaz (sin SQL ni reglas).
+- `db/migrations/001_corte_vertical_incidentes.sql`, `db/seed/`: esquema y datos reproducibles.
+
+### Reproducir la verificacion (sin credenciales reales)
+1. `cp .env.example .env.local` y completar con un proyecto Supabase de PRUEBA. Node 20+.
+2. En el SQL Editor ejecutar en orden: `docs/SUPABASE_BASELINE.sql`, `db/migrations/001_corte_vertical_incidentes.sql`, `db/seed/002_seed_corte_vertical.sql`.
+3. `npm install` y `npm test` (pruebas unitarias, de API y de arquitectura; no requieren base).
+4. Prueba real de persistencia: definir `TEST_SUPABASE_URL` y `TEST_SUPABASE_SERVICE_ROLE_KEY` y ejecutar `npx vitest run tests/integration`. Sin esas variables se omite.
+5. Estado inicial conocido: 5 incidentes con ids `00000000-0000-4000-8000-00000000000{1..5}`. Para reiniciar: `db/seed/999_reset_corte_vertical.sql` y luego el seed.
+6. Rendimiento de RF-02: `ACCESS_TOKEN=<jwt> npm run medir:consulta` (con `npm run dev` activo).
+
+Contratos de API: ver `docs/API_ENDPOINTS.md` (seccion v1).
 
 ## Flujo funcional implementado
 

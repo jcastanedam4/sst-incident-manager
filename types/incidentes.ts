@@ -20,6 +20,9 @@ export type Incidente = {
   titulo: string;
   descripcion: string;
   tipo_peligro: string;
+  gravedad?: Gravedad | null;
+  prioridad_asignada?: Prioridad | null;
+  requiere_atencion_inmediata?: boolean | null;
   estado: string;
   created_at?: string | null;
   fecha_suceso?: string | null;
@@ -56,6 +59,16 @@ export const TIPOS_GTC45 = [
   "Seguridad",
   "Fenomeno natural",
 ] as const;
+
+export type TipoPeligro = (typeof TIPOS_GTC45)[number];
+
+export const GRAVEDADES = ["Baja", "Media", "Alta"] as const;
+
+export type Gravedad = (typeof GRAVEDADES)[number];
+
+export const PRIORIDADES = ["Baja", "Media", "Alta"] as const;
+
+export type Prioridad = (typeof PRIORIDADES)[number];
 
 export const obtenerEstadosPersistencia = (estado: EstadoIncidente): string[] => {
   return [estado];

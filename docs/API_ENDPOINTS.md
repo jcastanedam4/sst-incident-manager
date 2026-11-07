@@ -1,4 +1,60 @@
-# Documentacion de API - SST Incident Manager
+# API v1 - Corte vertical de incidentes
+
+Autenticacion: `Authorization: Bearer <access_token de Supabase>`. Errores: `{ "error": { "codigo", "mensaje", "detalles?" } }`.
+
+## POST /api/v1/incidentes (RF-01)
+
+Request:
+
+```json
+{
+  "titulo": "Derrame en area de produccion",
+  "descripcion": "Se detecto una sustancia cerca de la zona de trabajo.",
+  "tipo_peligro": "Quimico",
+  "gravedad": "Alta"
+}
+```
+
+Valores permitidos: `tipo_peligro` = Fisico, Quimico, Biologico, Biomecanico, Psicosocial, Seguridad, Fenomeno natural; `gravedad` = Baja, Media, Alta. Cualquier prioridad enviada por el cliente se ignora.
+
+201 (header `Location: /api/v1/incidentes/{id}`):
+
+```json
+{
+  "data": {
+    "id": "uuid",
+    "titulo": "...",
+    "descripcion": "...",
+    "tipo_peligro": "Quimico",
+    "gravedad": "Alta",
+    "prioridad_asignada": "Alta",
+    "requiere_atencion_inmediata": true,
+    "estado": "Abierto",
+    "fecha_registro": "2026-11-02T08:00:00.000Z"
+  }
+}
+```
+
+Errores: 400 `VALIDACION` (con `detalles` por campo), 401 `NO_AUTORIZADO`, 500 `ERROR_INTERNO` (sin detalles tecnicos).
+
+## GET /api/v1/incidentes/{id} (RF-02)
+
+200 con el mismo objeto `data`. 400 `VALIDACION` (id no UUID), 401, 404 `NO_ENCONTRADO` (inexistente o fuera del alcance RLS del usuario), 500 `ERROR_INTERNO`. No modifica datos.
+
+## Matriz de priorizacion
+
+| Condicion | Prioridad | Atencion inmediata |
+|---|---|---|
+| Peligro Biologico o Quimico | Alta | Si |
+| Gravedad Alta | Alta | Si |
+| Gravedad Media | Media | No |
+| Gravedad Baja | Baja | No |
+
+---
+
+# Documentacion previa (referencial)
+
+## Documentacion de API - SST Incident Manager
 
 ## Objetivo
 

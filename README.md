@@ -49,6 +49,8 @@ npm run dev
 - npm run build: build de producción
 - npm run start: ejecutar build
 - npm run lint: validación con ESLint
+- npm test: pruebas unitarias, de API y arquitectura
+- npm run medir:consulta: medición de consultas de RF-02 con un JWT
 
 ## Corte vertical SST (RF-01 y RF-02)
 
@@ -88,8 +90,10 @@ Contratos de API: ver `docs/API_ENDPOINTS.md` (seccion v1).
 ## 2) Vista Empleado (ruta /dashboard/empleado)
 
 - Interfaz limpia para reportar incidentes.
-- Campos: Titulo, Descripcion, Tipo de Peligro (GTC 45), y evidencia multimedia.
-- Al enviar se hace INSERT en incidentes con estado Abierto y user_email del usuario autenticado.
+- Campos: Titulo, Descripcion, Tipo de Peligro (GTC 45), Gravedad y evidencia multimedia.
+- El formulario consume `POST /api/v1/incidentes`; no escribe directamente en Supabase.
+- El backend valida los datos, calcula la prioridad y la atencion inmediata, y devuelve la clasificacion persistida.
+- La pantalla permite consultar el incidente creado mediante `GET /api/v1/incidentes/{id}`.
 
 ## 3) Vista Administrador (ruta /dashboard/admin)
 
@@ -136,16 +140,25 @@ docs/
 ### Tabla incidentes
 
 - id (PK)
-- user_id (nullable)
+- user_id (FK opcional a `auth.users`)
 - titulo
 - descripcion
 - tipo_peligro
+- gravedad: Baja | Media | Alta
+- prioridad_asignada: Baja | Media | Alta
+- requiere_atencion_inmediata
 - estado
 - ubicacion
 - fecha_suceso (obligatoria)
-- created_at (recomendado)
+- created_at (fecha de registro)
 
-Nota: en este prototipo no hay datos semilla de incidentes cargados en el repositorio. Los registros aparecen cuando el trabajador envia un reporte desde la interfaz y se guardan en Supabase.
+El esquema reproducible se aplica en este orden:
+
+1. `docs/SUPABASE_BASELINE.sql`
+2. `db/migrations/001_corte_vertical_incidentes.sql`
+3. `db/seed/002_seed_corte_vertical.sql`
+
+La migracion agrega restricciones para los catalogos y mantiene la prioridad calculada junto con el incidente. El seed crea cinco registros con identificadores conocidos; para reiniciarlos se usa `db/seed/999_reset_corte_vertical.sql`.
 
 ### Tabla medidas_correctivas
 

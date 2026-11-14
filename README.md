@@ -35,6 +35,9 @@ NEXT_PUBLIC_SUPABASE_URL=tu_url_de_supabase
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_llave_anonima
 ```
 
+Para ejecutar las pruebas de persistencia real, configura localmente (sin subir
+el archivo) `TEST_SUPABASE_URL` y `TEST_SUPABASE_SERVICE_ROLE_KEY`.
+
 1. Inicia el servidor de desarrollo:
 
 ```bash
@@ -51,6 +54,7 @@ npm run dev
 - npm run lint: validación con ESLint
 - npm test: pruebas unitarias, de API y arquitectura
 - npm run medir:consulta: medición de consultas de RF-02 con un JWT
+- npx vitest run tests/integration/incidentRepository.integration.test.ts: pruebas reales de persistencia
 
 ## Corte vertical SST (RF-01 y RF-02)
 
@@ -58,6 +62,8 @@ Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `In
 
 - RF-01 (prioridad 1): registrar y clasificar un incidente (tipo de peligro GTC 45 + gravedad). La prioridad y la atencion inmediata se calculan SOLO en `lib/incidentes/evaluadorRiesgo.ts`.
 - RF-02 (prioridad 2): consultar un incidente clasificado por su identificador.
+- La interfaz diferencia errores de validación, negocio y comunicación, conserva
+  los datos rechazados y evita envíos o consultas simultáneas.
 - Fuera de alcance: notificaciones SMS/correo, reevaluacion por medico ocupacional, Machine Learning, gestion de brigadistas, panel administrativo avanzado.
 
 ### Estructura
@@ -73,6 +79,10 @@ Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `In
 4. Prueba real de persistencia: definir `TEST_SUPABASE_URL` y `TEST_SUPABASE_SERVICE_ROLE_KEY` y ejecutar `npx vitest run tests/integration`. Sin esas variables se omite.
 5. Estado inicial conocido: 5 incidentes con ids `00000000-0000-4000-8000-00000000000{1..5}`. Para reiniciar: `db/seed/999_reset_corte_vertical.sql` y luego el seed.
 6. Rendimiento de RF-02: `ACCESS_TOKEN=<jwt> npm run medir:consulta` (con `npm run dev` activo).
+
+La integración real fue verificada con cinco pruebas de repositorio: creación y
+consulta, ausencia de registro, lectura del seed y restricciones de integridad.
+Las pruebas no imprimen ni requieren publicar las credenciales.
 
 Contratos de API: ver `docs/API_ENDPOINTS.md` (seccion v1).
 
@@ -111,6 +121,18 @@ Contratos de API: ver `docs/API_ENDPOINTS.md` (seccion v1).
 - Navbar compartida en ambos dashboards.
 - Muestra rol actual y correo simulado.
 - Boton Cerrar sesion: ejecuta supabase.auth.signOut() y regresa al login.
+
+## Verificación del corte vertical
+
+La suite automatizada cubre reglas de riesgo, validaciones, servicio, API,
+arquitectura, interfaz de exportación y persistencia real. El resultado más
+reciente fue:
+
+- 51 pruebas unitarias, de API y arquitectura aprobadas.
+- 5 pruebas de integración Supabase aprobadas.
+- `npm run build` aprobado con la configuración de Supabase.
+- `npm run lint` mantiene incidencias heredadas fuera del flujo del corte
+  vertical.
 
 ## Estructura principal
 

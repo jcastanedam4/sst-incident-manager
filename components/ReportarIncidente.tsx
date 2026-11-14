@@ -126,6 +126,11 @@ export default function ReportarIncidente({ onIncidenteCreado }: Props) {
       setGravedad("Media");
       setArchivoAdjunto(null);
       onIncidenteCreado?.(incidente);
+    } catch (error) {
+      setAviso({
+        tipo: "comunicacion",
+        texto: error instanceof Error ? error.message : "No se pudo completar el registro.",
+      });
     } finally {
       enviandoRef.current = false;
       setEnviando(false);

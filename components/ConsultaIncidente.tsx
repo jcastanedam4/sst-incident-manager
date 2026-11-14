@@ -31,6 +31,8 @@ export default function ConsultaIncidente({ idSugerido }: Props) {
       } else {
         setError(respuesta.mensaje);
       }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudo completar la consulta.");
     } finally {
       consultandoRef.current = false;
       setCargando(false);

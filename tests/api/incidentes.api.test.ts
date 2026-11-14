@@ -91,4 +91,9 @@ describe("GET /api/v1/incidentes/{id} (RF-02)", () => {
     await get(ID);
     expect(repo.guardar).not.toHaveBeenCalled();
   });
+
+  it("401 sin sesión", async () => {
+    vi.mocked(autenticar).mockRejectedValue(new ErrorNoAutorizado());
+    expect((await get(ID)).status).toBe(401);
+  });
 });

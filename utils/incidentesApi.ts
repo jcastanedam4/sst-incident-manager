@@ -44,7 +44,13 @@ const obtenerToken = async (): Promise<string | null> => {
 };
 
 const llamarApi = async <T>(ruta: string, opciones: RequestInit, mensajeRed: string): Promise<ResultadoApi<T>> => {
-  const token = await obtenerToken();
+  let token: string | null;
+  try {
+    token = await obtenerToken();
+  } catch {
+    return { ok: false, tipo: "comunicacion", mensaje: mensajeRed };
+  }
+
   if (!token) {
     return { ok: false, tipo: "negocio", mensaje: "Tu sesión expiró. Inicia sesión nuevamente.", status: 401 };
   }

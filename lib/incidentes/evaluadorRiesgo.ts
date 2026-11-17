@@ -1,31 +1,51 @@
 import type { Gravedad, TipoPeligro } from "@/types/incidentes";
 import type { ClasificacionRiesgo } from "./modelo";
 
+
 /**
- * MATRIZ DE PRIORIZACIÓN AUTOMÁTICA (única fuente de la regla; no replicar en frontend)
+MATRIZ DE PRIORIZACIÓN AUTOMÁTICA (única fuente de la regla; no replicar en frontend)
  *
- * | Condición                                   | Prioridad | Atención inmediata |
- * |---------------------------------------------|-----------|--------------------|
- * | Peligro Biologico o Quimico (cualquier gravedad) | Alta | Sí                 |
- * | Gravedad Alta (cualquier peligro)           | Alta      | Sí                 |
- * | Gravedad Media (otros peligros)             | Media     | No                 |
- * | Gravedad Baja (otros peligros)              | Baja      | No                 |
+Basada en la clasificación de peligros de la GTC 45. La gravedad actúa como la
+consecuencia y el tipo de peligro ajusta la prioridad según su potencial de daño.
  *
- * Los casos "Media" y "Baja" se derivan de la gravedad (supuesto a confirmar por el equipo).
+| Peligro                      | Gravedad Baja | Gravedad Media | Gravedad Alta | Criterio                                   |
+|------------------------------|---------------|----------------|---------------|--------------------------------------------|
+| Biologico, Quimico           | Alta          | Alta           | Alta          | Efectos irreversibles, exposición oculta   |
+| Seguridad, Fenomeno natural  | Media         | Alta           | Alta          | Daño inmediato o colectivo                 |
+| Fisico                       | Media         | Media          | Alta          | Exposición continua, nunca queda en Baja   |
+| Biomecanico, Psicosocial     | Baja          | Media          | Alta          | Efecto gradual, se prioriza por gravedad   |
+ *
+Atención inmediata: Sí cuando la prioridad es Alta.
+Los ajustes por tipo de peligro son un supuesto a confirmar por el equipo SST.
  */
 export const PELIGROS_CRITICOS: readonly TipoPeligro[] = ["Biologico", "Quimico"];
+
+
+type Prioridad = ClasificacionRiesgo["prioridad_asignada"];
+
+
+/** Peligros no críticos con gravedad Baja o Media (la gravedad Alta se resuelve antes). */
+const MATRIZ_PELIGROS: Record<string, Record<"Baja" | "Media", Prioridad>> = {
+  Seguridad: { Baja: "Media", Media: "Alta" },
+  "Fenomeno natural": { Baja: "Media", Media: "Alta" },
+  Fisico: { Baja: "Media", Media: "Media" },
+  Biomecanico: { Baja: "Baja", Media: "Media" },
+  Psicosocial: { Baja: "Baja", Media: "Media" },
+};
+
 
 export function evaluarRiesgo(tipoPeligro: TipoPeligro, gravedad: Gravedad): ClasificacionRiesgo {
   if (PELIGROS_CRITICOS.includes(tipoPeligro) || gravedad === "Alta") {
     return { prioridad_asignada: "Alta", requiere_atencion_inmediata: true };
   }
 
-  if (gravedad === "Media") {
-    return { prioridad_asignada: "Media", requiere_atencion_inmediata: false };
-  }
 
-  return { prioridad_asignada: "Baja", requiere_atencion_inmediata: false };
+  const prioridad = MATRIZ_PELIGROS[tipoPeligro][gravedad];
+
+
+  return { prioridad_asignada: prioridad, requiere_atencion_inmediata: prioridad === "Alta" };
 }
+
 
 /** Servicio de dominio: sin HTTP, sin base de datos. */
 export class EvaluadorRiesgoService {

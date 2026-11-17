@@ -302,3 +302,26 @@ Notas:
 - Explicación paso a paso de la fase: [docs/COMO_SE_DESARROLLO_FASE4.md](docs/COMO_SE_DESARROLLO_FASE4.md)
 - Guia de login y proteccion de rutas: [docs/LOGIN_SIMULADO_Y_PROTECCION_RUTAS.md](docs/LOGIN_SIMULADO_Y_PROTECCION_RUTAS.md)
 - Flujo funcional completo (reporte, gestion, auditoria, exportacion): [docs/FLUJO_REPORTE_Y_GESTION_SST.md](docs/FLUJO_REPORTE_Y_GESTION_SST.md)
+
+
+## Test
+
+- npm install -> Descarga las librerías 
+
+
+- mkdir evidencias -> Crea una carpeta llamada evidencias para guardar los resultados
+
+
+- npm test | Tee-Object evidencias\npm-test.txt -> Corre todas las pruebas automáticas del proyecto
+
+
+- npx vitest run tests/lib/incidentService.test.ts ->Comprueba que se puede registrar un incidente, que un dato inválido se rechaza sin guardar nada, que se encuentra uno existente y que uno inexistente da error controlado. 
+
+
+- npx vitest run tests/lib/evaluadorRiesgo.test.ts -> Prueba la matriz de prioridad. Cubre las 21 combinaciones de peligro y gravedad.
+
+
+- npx vitest run tests/api -> Prueba los dos endpoints, con el servicio simulado. Comprueba las respuestas: 201 al crear, 400 por datos inválidos, 401 sin sesión, 404 si el incidente no existe y 500 sin mostrar detalles técnicos.
+
+
+- npx vitest run tests/architecture -> Revisa la estructura del código, no su funcionamiento. Verifica que la pantalla no tenga SQL ni repita la regla de prioridad, que los endpoints deleguen al servicio y que solo el repositorio toque la tabla. Es la evidencia de que cada capa hace solo lo suyo.

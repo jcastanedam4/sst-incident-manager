@@ -108,3 +108,11 @@ export const consultarIncidente = (id: string) =>
     { method: "GET" },
     "No se pudo consultar el incidente por un problema de conexión. Intenta de nuevo."
   );
+
+/** Historial reciente del usuario autenticado; el servidor determina el propietario. */
+export const listarMisIncidentes = () =>
+  llamarApi<IncidenteClasificadoApi[]>(
+    "/api/v1/incidentes/mis-reportes",
+    { method: "GET" },
+    "No se pudieron cargar tus últimos reportes. Intenta de nuevo."
+  );

@@ -1,4 +1,5 @@
-import { crearIncidente, consultarIncidente } from "@/utils/incidentesApi";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { crearIncidente, consultarIncidente, listarMisIncidentes } from "@/utils/incidentesApi";
 
 const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }));
 
@@ -78,6 +79,19 @@ describe("cliente API de incidentes", () => {
       status: 404,
       mensaje: "No existe.",
     });
+  });
+
+  it("solicita el historial reciente con el token de sesión", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [incidente] }), { status: 200, headers: { "Content-Type": "application/json" } })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listarMisIncidentes()).resolves.toEqual({ ok: true, data: [incidente] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/incidentes/mis-reportes",
+      expect.objectContaining({ method: "GET", headers: { "Content-Type": "application/json", Authorization: "Bearer test-token" } })
+    );
   });
 
   it("advierte de desconexión sin reintentar el registro automáticamente", async () => {

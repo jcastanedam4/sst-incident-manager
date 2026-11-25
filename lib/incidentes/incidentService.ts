@@ -3,6 +3,8 @@ import { EvaluadorRiesgoService } from "./evaluadorRiesgo";
 import type { IncidentRepository, IncidenteClasificado, UsuarioAutenticado } from "./modelo";
 import { validarIdIncidente, validarNuevoIncidente } from "./validacion";
 
+const LIMITE_HISTORIAL = 5;
+
 /**
  * Servicio de aplicación del corte vertical.
  * - RF-01: valida, aplica la matriz de riesgo y solo entonces pide persistir.
@@ -37,5 +39,9 @@ export class IncidentService {
     }
 
     return incidente;
+  }
+
+  async listarUltimosPorUsuario(usuario: UsuarioAutenticado): Promise<IncidenteClasificado[]> {
+    return this.repositorio.buscarUltimosPorUsuario(usuario.id, usuario.email, LIMITE_HISTORIAL);
   }
 }

@@ -9,7 +9,7 @@ const guardado: IncidenteClasificado = {
   prioridad_asignada: "Alta", requiere_atencion_inmediata: true, estado: "Abierto", fecha_registro: "2026-11-02T08:00:00.000Z",
 };
 
-const repo = { guardar: vi.fn(), buscarPorId: vi.fn() };
+const repo = { guardar: vi.fn(), buscarPorId: vi.fn(), buscarUltimosPorUsuario: vi.fn() };
 
 vi.mock("@/lib/incidentes/contexto", () => ({
   autenticar: vi.fn(),
@@ -19,11 +19,14 @@ vi.mock("@/lib/incidentes/contexto", () => ({
 import { autenticar } from "@/lib/incidentes/contexto";
 import { POST } from "@/app/api/v1/incidentes/route";
 import { GET } from "@/app/api/v1/incidentes/[id]/route";
+import { GET as GETMisReportes } from "@/app/api/v1/incidentes/mis-reportes/route";
 
 const post = (cuerpo: unknown, crudo = false) =>
   POST(new Request("http://localhost/api/v1/incidentes", { method: "POST", body: crudo ? (cuerpo as string) : JSON.stringify(cuerpo) }));
 const get = (id: string) =>
   GET(new Request(`http://localhost/api/v1/incidentes/${id}`), { params: Promise.resolve({ id }) });
+const getMisReportes = (query = "") =>
+  GETMisReportes(new Request(`http://localhost/api/v1/incidentes/mis-reportes${query}`));
 
 const valido = { titulo: "Derrame", descripcion: "x", tipo_peligro: "Quimico", gravedad: "Alta" };
 
@@ -31,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.mocked(autenticar).mockResolvedValue({ usuario: { id: "u1", email: "e@empresa.com" }, cliente: {} as never });
+  repo.buscarUltimosPorUsuario.mockResolvedValue([]);
 });
 
 describe("POST /api/v1/incidentes (RF-01)", () => {
@@ -95,5 +99,24 @@ describe("GET /api/v1/incidentes/{id} (RF-02)", () => {
   it("401 sin sesión", async () => {
     vi.mocked(autenticar).mockRejectedValue(new ErrorNoAutorizado());
     expect((await get(ID)).status).toBe(401);
+  });
+});
+
+describe("GET /api/v1/incidentes/mis-reportes", () => {
+  it("devuelve el historial del usuario autenticado e ignora un user_id del cliente", async () => {
+    repo.buscarUltimosPorUsuario.mockResolvedValue([guardado]);
+
+    const r = await getMisReportes("?user_id=otro-usuario");
+
+    expect(r.status).toBe(200);
+    expect((await r.json()).data).toEqual([guardado]);
+    expect(repo.buscarUltimosPorUsuario).toHaveBeenCalledWith("u1", "e@empresa.com", 5);
+  });
+
+  it("requiere sesión autenticada", async () => {
+    vi.mocked(autenticar).mockRejectedValue(new ErrorNoAutorizado());
+
+    expect((await getMisReportes()).status).toBe(401);
+    expect(repo.buscarUltimosPorUsuario).not.toHaveBeenCalled();
   });
 });

@@ -1,16 +1,19 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReportarIncidente from "@/components/ReportarIncidente";
 import ConsultaIncidente from "@/components/ConsultaIncidente";
 
-const { crearIncidenteMock, consultarIncidenteMock } = vi.hoisted(() => ({
+const { crearIncidenteMock, consultarIncidenteMock, listarMisIncidentesMock } = vi.hoisted(() => ({
   crearIncidenteMock: vi.fn(),
   consultarIncidenteMock: vi.fn(),
+  listarMisIncidentesMock: vi.fn(),
 }));
 
 vi.mock("@/utils/incidentesApi", () => ({
   crearIncidente: crearIncidenteMock,
   consultarIncidente: consultarIncidenteMock,
+  listarMisIncidentes: listarMisIncidentesMock,
 }));
 
 vi.mock("@/utils/evidencias", () => ({ subirEvidencia: vi.fn() }));
@@ -40,6 +43,7 @@ const incidente = {
 
 let root: Root;
 let contenedor: HTMLDivElement;
+const mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
 
 const actualizarValor = async (elemento: HTMLInputElement | HTMLTextAreaElement, valor: string) => {
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(elemento), "value");
@@ -50,6 +54,19 @@ const actualizarValor = async (elemento: HTMLInputElement | HTMLTextAreaElement,
   });
 };
 
+const actualizarSeleccion = async (elemento: HTMLSelectElement, valor: string) => {
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(elemento), "value");
+  await act(async () => {
+    descriptor?.set?.call(elemento, valor);
+    elemento.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+};
+
+const completarClasificacion = async () => {
+  await actualizarSeleccion(contenedor.querySelector<HTMLSelectElement>("#tipoPeligro")!, "Quimico");
+  await actualizarSeleccion(contenedor.querySelector<HTMLSelectElement>("#gravedad")!, "Alta");
+};
+
 const enviarFormulario = async (formulario: HTMLFormElement) => {
   await act(async () => {
     formulario.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -58,6 +75,7 @@ const enviarFormulario = async (formulario: HTMLFormElement) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listarMisIncidentesMock.mockResolvedValue({ ok: true, data: [] });
   window.sessionStorage.clear();
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   contenedor = document.createElement("div");
@@ -68,17 +86,81 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   contenedor.remove();
+  if (mediaDevicesDescriptor) {
+    Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
+  } else {
+    Reflect.deleteProperty(navigator, "mediaDevices");
+  }
 });
 
 describe("resultados visibles en el flujo de reporte", () => {
-  it("muestra la clasificación confirmada y conserva el ID de sesión", async () => {
-    crearIncidenteMock.mockResolvedValue({ ok: true, data: incidente });
+  it("exige elegir tipo de peligro y gravedad antes de enviar", async () => {
     await act(async () => root.render(<ReportarIncidente />));
+
+    expect(contenedor.querySelector<HTMLSelectElement>("#tipoPeligro")?.value).toBe("");
+    expect(contenedor.querySelector<HTMLSelectElement>("#gravedad")?.value).toBe("");
+    await enviarFormulario(contenedor.querySelector("form")!);
+
+    expect(crearIncidenteMock).not.toHaveBeenCalled();
+    expect(contenedor.textContent).toContain("Selecciona un tipo de peligro.");
+    expect(contenedor.textContent).toContain("Selecciona la gravedad.");
+  });
+
+  it("muestra la clasificación confirmada, conserva el ID y permite ir a consultarlo", async () => {
+    const irAConsulta = vi.fn();
+    crearIncidenteMock.mockResolvedValue({ ok: true, data: incidente });
+    await act(async () => root.render(<ReportarIncidente onIrAConsulta={irAConsulta} />));
+    await completarClasificacion();
     await enviarFormulario(contenedor.querySelector("form")!);
 
     expect(contenedor.textContent).toContain("Incidente registrado y clasificado por el sistema.");
     expect(contenedor.textContent).toContain(`Incidente ${incidente.id}: prioridad Alta`);
     expect(window.sessionStorage.getItem("sst-incident-manager:ultimo-incidente-id")).toBe(incidente.id);
+
+    const botonConsulta = [...contenedor.querySelectorAll("button")].find(
+      (boton) => boton.textContent === "Consultar este incidente"
+    )!;
+    await act(async () => botonConsulta.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(irAConsulta).toHaveBeenCalledOnce();
+  });
+
+  it("permite quitar una evidencia seleccionada", async () => {
+    await act(async () => root.render(<ReportarIncidente />));
+    const inputArchivo = contenedor.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const archivo = new File(["contenido"], "evidencia.pdf", { type: "application/pdf" });
+
+    await act(async () => {
+      Object.defineProperty(inputArchivo, "files", { configurable: true, value: [archivo] });
+      inputArchivo.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(contenedor.textContent).toContain("evidencia.pdf");
+    const quitar = [...contenedor.querySelectorAll("button")].find(
+      (boton) => boton.textContent === "Quitar evidencia"
+    )!;
+    await act(async () => quitar.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(contenedor.textContent).not.toContain("evidencia.pdf");
+    expect(inputArchivo.value).toBe("");
+  });
+
+  it("explica cuando la cámara no tiene permiso", async () => {
+    const errorPermiso = Object.assign(new Error("denied"), { name: "NotAllowedError" });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockRejectedValue(errorPermiso) },
+    });
+    await act(async () => root.render(<ReportarIncidente />));
+    const botonCamara = [...contenedor.querySelectorAll("button")].find(
+      (boton) => boton.textContent === "Tomar foto"
+    )!;
+
+    await act(async () => {
+      botonCamara.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(contenedor.querySelector('[role="alert"]')?.textContent).toContain("No se concedió permiso");
   });
 
   it("muestra el rechazo y conserva los datos ingresados", async () => {
@@ -89,6 +171,7 @@ describe("resultados visibles en el flujo de reporte", () => {
       detalles: [{ campo: "titulo", mensaje: "El título es obligatorio." }],
     });
     await act(async () => root.render(<ReportarIncidente />));
+    await completarClasificacion();
     const titulo = contenedor.querySelector<HTMLInputElement>("#titulo")!;
     await actualizarValor(titulo, "Reporte pendiente");
     await enviarFormulario(contenedor.querySelector("form")!);
@@ -105,6 +188,7 @@ describe("resultados visibles en el flujo de reporte", () => {
       mensaje: "No se pudo confirmar el envío.",
     });
     await act(async () => root.render(<ReportarIncidente />));
+    await completarClasificacion();
     const titulo = contenedor.querySelector<HTMLInputElement>("#titulo")!;
     await actualizarValor(titulo, "Reporte sin conexión");
     await enviarFormulario(contenedor.querySelector("form")!);
@@ -115,6 +199,37 @@ describe("resultados visibles en el flujo de reporte", () => {
 });
 
 describe("resultados visibles en la consulta", () => {
+  it("muestra los reportes recientes del usuario y permite seleccionar uno", async () => {
+    const reporteReciente = { ...incidente, id: "00000000-0000-4000-8000-000000000002", titulo: "Caída" };
+    listarMisIncidentesMock.mockResolvedValue({ ok: true, data: [reporteReciente] });
+
+    await act(async () => root.render(<ConsultaIncidente />));
+
+    expect(contenedor.textContent).toContain("Tus últimos 5 reportes");
+    const botonReporte = [...contenedor.querySelectorAll("button")].find(
+      (boton) => boton.textContent?.includes("Caída")
+    )!;
+    await act(async () => botonReporte.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(contenedor.querySelector<HTMLInputElement>("input")?.value).toBe(reporteReciente.id);
+    expect(contenedor.textContent).toContain(`Incidente ${reporteReciente.id}: prioridad Alta`);
+    expect(consultarIncidenteMock).not.toHaveBeenCalled();
+  });
+
+  it("muestra errores al cargar el historial sin ocultar la consulta manual", async () => {
+    listarMisIncidentesMock.mockResolvedValue({
+      ok: false,
+      tipo: "negocio",
+      status: 401,
+      mensaje: "Tu sesión expiró.",
+    });
+
+    await act(async () => root.render(<ConsultaIncidente />));
+
+    expect(contenedor.querySelector('[role="alert"]')?.textContent).toContain("Tu sesión expiró.");
+    expect(contenedor.querySelector('input[aria-label="Identificador del incidente (opcional)"]')).not.toBeNull();
+  });
+
   it("precarga el ID tras recargar y muestra la clasificación consultada", async () => {
     window.sessionStorage.setItem("sst-incident-manager:ultimo-incidente-id", incidente.id);
     consultarIncidenteMock.mockResolvedValue({ ok: true, data: incidente });

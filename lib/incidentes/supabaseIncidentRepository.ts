@@ -59,4 +59,34 @@ export class SupabaseIncidentRepository implements IncidentRepository {
 
     return data ? mapearFila(data as FilaIncidente) : null;
   }
+
+  async buscarUltimosPorUsuario(userId: string, email: string, limite: number): Promise<IncidenteClasificado[]> {
+    const [porUsuario, heredados] = await Promise.all([
+      this.cliente
+        .from(TABLA)
+        .select(COLUMNAS)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(limite),
+      this.cliente
+        .from(TABLA)
+        .select(COLUMNAS)
+        .is("user_id", null)
+        .eq("user_email", email)
+        .order("created_at", { ascending: false })
+        .limit(limite),
+    ]);
+
+    if (porUsuario.error || heredados.error) {
+      throw new ErrorPersistencia(
+        "No fue posible consultar el historial de incidentes.",
+        porUsuario.error ?? heredados.error
+      );
+    }
+
+    return [...(porUsuario.data ?? []), ...(heredados.data ?? [])]
+      .map((fila) => mapearFila(fila as FilaIncidente))
+      .sort((a, b) => Date.parse(b.fecha_registro) - Date.parse(a.fecha_registro))
+      .slice(0, limite);
+  }
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { IncidenteClasificadoApi } from "@/utils/incidentesApi";
 
 const COLOR_PRIORIDAD: Record<string, string> = {
@@ -8,11 +9,40 @@ const COLOR_PRIORIDAD: Record<string, string> = {
 
 /** Solo muestra lo que calculó el backend; no contiene ninguna regla de priorización. */
 export default function ClasificacionIncidente({ incidente }: { incidente: IncidenteClasificadoApi }) {
+  const [idCopiado, setIdCopiado] = useState<string | null>(null);
+  const [errorCopiar, setErrorCopiar] = useState(false);
+
+  const copiarId = async () => {
+    setErrorCopiar(false);
+    try {
+      await navigator.clipboard.writeText(incidente.id);
+      setIdCopiado(incidente.id);
+    } catch {
+      setIdCopiado(null);
+      setErrorCopiar(true);
+    }
+  };
+
   return (
     <dl aria-label="Clasificación del incidente" role="status" className="mt-4 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800">
       <div>
         <dt className="font-semibold">Identificador</dt>
-        <dd className="break-all font-mono text-xs">{incidente.id}</dd>
+        <div className="flex flex-wrap items-center gap-2">
+          <dd className="break-all font-mono text-xs">{incidente.id}</dd>
+          <button
+            type="button"
+            onClick={() => void copiarId()}
+            aria-label="Copiar identificador del incidente"
+            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+          >
+            {idCopiado === incidente.id ? "ID copiado" : "Copiar ID"}
+          </button>
+        </div>
+        {errorCopiar && (
+          <p role="alert" className="mt-1 text-xs text-red-700">
+            No se pudo copiar. Puedes seleccionar el identificador y copiarlo manualmente.
+          </p>
+        )}
       </div>
       <div>
         <dt className="font-semibold">Título</dt>

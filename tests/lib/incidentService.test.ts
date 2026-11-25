@@ -29,6 +29,15 @@ class RepositorioSimulado implements IncidentRepository {
   async buscarPorId(id: string) {
     return this.almacen.get(id) ?? null;
   }
+
+  async buscarUltimosPorUsuario(
+    userId: string,
+    email: string,
+    limite: number
+  ): Promise<IncidenteClasificado[]> {
+    if (!userId || !email) return [];
+    return Array.from(this.almacen.values()).slice(0, limite);
+  }
 }
 
 
@@ -86,6 +95,15 @@ describe("IncidentService — RF-01 registrar", () => {
 
 
 describe("IncidentService — RF-02 consultar", () => {
+  it("delega el historial con el usuario autenticado y un límite de cinco", async () => {
+    const repo = new RepositorioSimulado();
+    const reportes = [await new IncidentService(repo).registrar(entrada, usuario)];
+    const buscarUltimos = vi.spyOn(repo, "buscarUltimosPorUsuario").mockResolvedValue(reportes);
+
+    await expect(new IncidentService(repo).listarUltimosPorUsuario(usuario)).resolves.toEqual(reportes);
+    expect(buscarUltimos).toHaveBeenCalledWith(usuario.id, usuario.email, 5);
+  });
+
   it("devuelve un incidente existente", async () => {
     const repo = new RepositorioSimulado();
     const servicio = new IncidentService(repo);

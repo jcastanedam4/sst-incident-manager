@@ -70,11 +70,11 @@ Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `In
 - `lib/incidentes/`: validacion, matriz de riesgo, servicio, contrato y repositorio Supabase.
 - `app/api/v1/incidentes/`: endpoints.
 - `components/ReportarIncidente.tsx`, `ConsultaIncidente.tsx`: interfaz (sin SQL ni reglas).
-- `db/migrations/001_corte_vertical_incidentes.sql`, `db/seed/`: esquema y datos reproducibles.
+- `db/migrations/`, `db/seed/`: esquema y datos reproducibles.
 
 ### Reproducir la verificacion (sin credenciales reales)
 1. `cp .env.example .env.local` y completar con un proyecto Supabase de PRUEBA. Node 20+.
-2. En el SQL Editor ejecutar en orden: `docs/SUPABASE_BASELINE.sql`, `db/migrations/001_corte_vertical_incidentes.sql`, `db/seed/002_seed_corte_vertical.sql`.
+2. En el SQL Editor ejecutar en orden: `docs/SUPABASE_BASELINE.sql`, `db/migrations/001_corte_vertical_incidentes.sql`, `db/migrations/002_historial_incidentes_usuario.sql`, `db/seed/002_seed_corte_vertical.sql`.
 3. `npm install` y `npm test` (pruebas unitarias, API, interfaz y arquitectura; no requieren base).
 4. Para ejecutar la integración real, exporta las variables de `.env.local` al proceso PowerShell y corre los tests. Vitest omite esta suite de forma intencional si no se exportan:
 
@@ -109,7 +109,7 @@ La integración real se verificó previamente con cinco pruebas de repositorio:
 creación y consulta, ausencia de registro, lectura del seed y restricciones de
 integridad. Sin `TEST_SUPABASE_SERVICE_ROLE_KEY`, Vitest omite esas cinco pruebas.
 
-Contratos de API: ver `docs/API_ENDPOINTS.md` (seccion v1).
+Contratos de API implementados: ver `docs/API_ENDPOINTS.md`.
 
 ## Flujo funcional implementado
 
@@ -128,6 +128,7 @@ Contratos de API: ver `docs/API_ENDPOINTS.md` (seccion v1).
 - Campos: Titulo, Descripcion, Tipo de Peligro (GTC 45), Gravedad y evidencia multimedia.
 - El formulario consume `POST /api/v1/incidentes`; no escribe directamente en Supabase.
 - El backend valida los datos, calcula la prioridad y la atencion inmediata, y devuelve la clasificacion persistida.
+- La consulta muestra los cinco reportes más recientes del empleado autenticado; se puede seleccionar uno para ver su clasificación sin ingresar el UUID.
 - La pantalla conserva el último ID confirmado en el almacenamiento de sesión; después de recargar,
   permite consultar de nuevo ese mismo incidente mediante `GET /api/v1/incidentes/{id}`.
 - Los errores de validación, autorización, ausencia y comunicación se muestran en pantalla sin
@@ -216,7 +217,8 @@ El esquema reproducible se aplica en este orden:
 
 1. `docs/SUPABASE_BASELINE.sql`
 2. `db/migrations/001_corte_vertical_incidentes.sql`
-3. `db/seed/002_seed_corte_vertical.sql`
+3. `db/migrations/002_historial_incidentes_usuario.sql`
+4. `db/seed/002_seed_corte_vertical.sql`
 
 La migracion agrega restricciones para los catalogos y mantiene la prioridad calculada junto con el incidente. El seed crea cinco registros con identificadores conocidos; para reiniciarlos se usa `db/seed/999_reset_corte_vertical.sql`.
 

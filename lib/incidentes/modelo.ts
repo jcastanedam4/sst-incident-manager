@@ -41,9 +41,12 @@ export type UsuarioAutenticado = {
  *
  * - guardar: persiste y devuelve el registro con su id real.
  * - buscarPorId: devuelve null cuando el incidente no existe.
+ * - buscarUltimosPorUsuario: devuelve los reportes recientes del usuario, incluidos los antiguos
+ *   sin user_id cuyo correo de propietario coincide con su sesión autenticada.
  * Cualquier fallo técnico se lanza como ErrorPersistencia.
  */
 export interface IncidentRepository {
   guardar(incidente: IncidentePersistible): Promise<IncidenteClasificado>;
   buscarPorId(id: string): Promise<IncidenteClasificado | null>;
+  buscarUltimosPorUsuario(userId: string, email: string, limite: number): Promise<IncidenteClasificado[]>;
 }

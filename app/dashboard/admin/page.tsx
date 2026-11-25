@@ -6,14 +6,20 @@ import Navbar from "@/components/Navbar";
 import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
 import {
   ESTADOS_INCIDENTE,
+  GRAVEDADES,
   normalizarEstado,
   obtenerEstadosPersistencia,
+  TIPOS_GTC45,
+  TIPO_PELIGRO_SIN_CLASIFICAR,
   type AuditLog,
   type EstadoIncidente,
+  type Gravedad,
   type Incidente,
   type Prioridad,
+  type TipoPeligroRegistrado,
   type UsuarioApp,
 } from "@/types/incidentes";
+import { actualizarClasificacionIncidente, sugerirTipoRiesgo } from "@/utils/incidentesApi";
 import { filtrarIncidentes, type FiltroPrioridad } from "@/utils/filtrosIncidentes";
 import { calcularIndicadoresIncidentes } from "@/utils/indicadoresIncidentes";
 import ExportButtons from "./ExportButtons";
@@ -39,6 +45,14 @@ const COLOR_INDICADOR_PRIORIDAD: Record<string, string> = {
 
 const INCIDENTES_POR_PAGINA = 10;
 
+const tipoPeligroRegistrado = (valor: string): TipoPeligroRegistrado =>
+  valor === TIPO_PELIGRO_SIN_CLASIFICAR
+    ? TIPO_PELIGRO_SIN_CLASIFICAR
+    : TIPOS_GTC45.find((tipo) => tipo === valor) ?? TIPO_PELIGRO_SIN_CLASIFICAR;
+
+const gravedadRegistrada = (valor: unknown): Gravedad =>
+  GRAVEDADES.find((gravedad) => gravedad === valor) ?? "Media";
+
 export default function DashboardAdminPage() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<UsuarioApp | null>(null);
@@ -47,6 +61,10 @@ export default function DashboardAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [incidenteSeleccionado, setIncidenteSeleccionado] = useState<Incidente | null>(null);
+  const [tipoPeligroEditor, setTipoPeligroEditor] = useState<TipoPeligroRegistrado>(TIPO_PELIGRO_SIN_CLASIFICAR);
+  const [gravedadEditor, setGravedadEditor] = useState<Gravedad>("Media");
+  const [sugerenciaTipoAdmin, setSugerenciaTipoAdmin] = useState<string | null>(null);
+  const [estadoSugerenciaAdmin, setEstadoSugerenciaAdmin] = useState<"inactiva" | "consultando" | "lista" | "error">("inactiva");
   const [filtroEstado, setFiltroEstado] = useState<"TODOS" | EstadoIncidente>("TODOS");
   const [filtroPrioridad, setFiltroPrioridad] = useState<FiltroPrioridad>("TODOS");
   const [prioridad, setPrioridad] = useState("Media");
@@ -55,6 +73,10 @@ export default function DashboardAdminPage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [paginaIncidentes, setPaginaIncidentes] = useState(1);
   const listaIncidentesRef = useRef<HTMLElement>(null);
+  const sugerenciaAbortRef = useRef<AbortController | null>(null);
+  const tipoPeligroEditadoRef = useRef(false);
+
+  useEffect(() => () => sugerenciaAbortRef.current?.abort(), []);
 
   const cambiarPagina = (pagina: number) => {
     setPaginaIncidentes(pagina);
@@ -152,11 +174,36 @@ export default function DashboardAdminPage() {
   }, [authCargada, router, usuario]);
 
   const seleccionarIncidente = async (incidente: Incidente) => {
+    sugerenciaAbortRef.current?.abort();
+    tipoPeligroEditadoRef.current = false;
     setIncidenteSeleccionado(incidente);
+    setTipoPeligroEditor(tipoPeligroRegistrado(incidente.tipo_peligro));
+    setGravedadEditor(gravedadRegistrada(incidente.gravedad));
+    setSugerenciaTipoAdmin(null);
+    setEstadoSugerenciaAdmin("consultando");
     setPrioridad("Media");
     setMedidaCorrectiva("");
     setError(null);
+
+    const controlador = new AbortController();
+    sugerenciaAbortRef.current = controlador;
+    const resultadoSugerenciaPromise = sugerirTipoRiesgo(incidente.descripcion, controlador.signal);
     await cargarAuditLogs(incidente.id);
+    const resultado = await resultadoSugerenciaPromise;
+
+    if (controlador.signal.aborted) {
+      return;
+    }
+
+    if (resultado.ok) {
+      setSugerenciaTipoAdmin(resultado.data.tipo_peligro);
+      setEstadoSugerenciaAdmin("lista");
+      if (!tipoPeligroEditadoRef.current) {
+        setTipoPeligroEditor(resultado.data.tipo_peligro);
+      }
+    } else {
+      setEstadoSugerenciaAdmin("error");
+    }
   };
 
   const actualizarEstado = async (incidenteId: string, estado: EstadoIncidente) => {
@@ -196,6 +243,51 @@ export default function DashboardAdminPage() {
     return true;
   };
 
+  const persistirClasificacion = async () => {
+    if (!incidenteSeleccionado) {
+      return false;
+    }
+
+    const clasificacionSinCambios =
+      incidenteSeleccionado.tipo_peligro === tipoPeligroEditor &&
+      incidenteSeleccionado.gravedad === gravedadEditor &&
+      (tipoPeligroEditor === TIPO_PELIGRO_SIN_CLASIFICAR || incidenteSeleccionado.prioridad_asignada !== null);
+    if (clasificacionSinCambios) {
+      return true;
+    }
+
+    const respuesta = await actualizarClasificacionIncidente(incidenteSeleccionado.id, {
+      tipo_peligro: tipoPeligroEditor,
+      gravedad: gravedadEditor,
+    });
+
+    if (!respuesta.ok) {
+      setError(`No se pudo guardar la clasificación: ${respuesta.mensaje}`);
+      return false;
+    }
+
+    setIncidenteSeleccionado(respuesta.data);
+    setIncidentes((actuales) =>
+      actuales.map((incidente) => (incidente.id === respuesta.data.id ? { ...incidente, ...respuesta.data } : incidente))
+    );
+    await cargarAuditLogs(incidenteSeleccionado.id);
+    return true;
+  };
+
+  const guardarClasificacion = async () => {
+    if (!incidenteSeleccionado) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    const guardado = await persistirClasificacion();
+    if (guardado) {
+      setError(null);
+    }
+    setLoading(false);
+  };
+
   const guardarRevision = async () => {
     if (!incidenteSeleccionado) {
       return;
@@ -208,6 +300,12 @@ export default function DashboardAdminPage() {
 
     setLoading(true);
     setError(null);
+
+    const clasificacionGuardada = await persistirClasificacion();
+    if (!clasificacionGuardada) {
+      setLoading(false);
+      return;
+    }
 
     const descripcionMedida = `[Prioridad: ${prioridad}] ${medidaCorrectiva}`;
 
@@ -236,6 +334,26 @@ export default function DashboardAdminPage() {
     setPrioridad("Media");
     setMedidaCorrectiva("");
     setLoading(false);
+  };
+
+  const guardarYCerrar = async () => {
+    if (!incidenteSeleccionado) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    const clasificacionGuardada = await persistirClasificacion();
+    if (!clasificacionGuardada) {
+      setLoading(false);
+      return;
+    }
+
+    const actualizado = await actualizarEstado(incidenteSeleccionado.id, "Cerrado");
+    if (actualizado) {
+      sugerenciaAbortRef.current?.abort();
+      setIncidenteSeleccionado(null);
+    }
   };
 
   const incidentesFiltrados = useMemo(
@@ -544,6 +662,58 @@ export default function DashboardAdminPage() {
                 </p>
 
                 <div className="mt-4 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="tipoPeligroAdmin" className="mb-1 block text-sm font-medium text-blue-900">
+                        Tipo de peligro (GTC 45)
+                      </label>
+                      <select
+                        id="tipoPeligroAdmin"
+                        value={tipoPeligroEditor}
+                        onChange={(event) => {
+                          tipoPeligroEditadoRef.current = true;
+                          setTipoPeligroEditor(tipoPeligroRegistrado(event.target.value));
+                        }}
+                        className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+                      >
+                        <option value={TIPO_PELIGRO_SIN_CLASIFICAR}>Sin clasificar</option>
+                        {TIPOS_GTC45.map((tipo) => (
+                          <option key={tipo} value={tipo}>{tipo}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="gravedadAdmin" className="mb-1 block text-sm font-medium text-blue-900">
+                        Gravedad
+                      </label>
+                      <select
+                        id="gravedadAdmin"
+                        value={gravedadEditor}
+                        onChange={(event) => setGravedadEditor(gravedadRegistrada(event.target.value))}
+                        className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+                      >
+                        {GRAVEDADES.map((gravedad) => (
+                          <option key={gravedad} value={gravedad}>{gravedad}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div aria-live="polite">
+                    {estadoSugerenciaAdmin === "consultando" && (
+                      <p role="status" className="text-sm text-blue-800">Consultando sugerencia de IA...</p>
+                    )}
+                    {estadoSugerenciaAdmin === "lista" && sugerenciaTipoAdmin && (
+                      <p role="status" className="text-sm text-blue-800">
+                        Sugerencia de IA: <strong>{sugerenciaTipoAdmin}</strong>. Puedes modificarla antes de guardar.
+                      </p>
+                    )}
+                    {estadoSugerenciaAdmin === "error" && (
+                      <p role="alert" className="text-sm text-amber-800">
+                        No se pudo obtener la sugerencia. Puedes asignar el tipo manualmente.
+                      </p>
+                    )}
+                  </div>
+
                   <div>
                     <label htmlFor="prioridad" className="mb-1 block text-sm font-medium text-blue-900">
                       Prioridad de la medida correctiva
@@ -574,18 +744,34 @@ export default function DashboardAdminPage() {
                     />
                   </div>
 
+                  {error && (
+                    <p role="alert" className="text-sm font-medium text-red-700">
+                      {error}
+                    </p>
+                  )}
+
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      disabled={loading}
+                      onClick={() => void guardarClasificacion()}
+                      className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Guardar clasificación
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loading}
                       onClick={() => void guardarRevision()}
-                      className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800"
+                      className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Guardar revision
                     </button>
                     <button
                       type="button"
-                      onClick={() => void actualizarEstado(incidenteSeleccionado.id, "Cerrado")}
-                      className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+                      disabled={loading}
+                      onClick={() => void guardarYCerrar()}
+                      className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Guardar y cerrar
                     </button>

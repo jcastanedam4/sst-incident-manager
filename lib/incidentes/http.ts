@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ErrorNoAutorizado, ErrorNoEncontrado, ErrorPersistencia, ErrorValidacion } from "./errores";
+import { ErrorNoAutorizado, ErrorNoEncontrado, ErrorPersistencia, ErrorSinPermiso, ErrorValidacion } from "./errores";
 
 type CuerpoError = {
   error: { codigo: string; mensaje: string; detalles?: unknown };
@@ -17,6 +17,10 @@ export function responderError(error: unknown): NextResponse {
 
   if (error instanceof ErrorNoAutorizado) {
     return NextResponse.json(cuerpoError("NO_AUTORIZADO", error.message), { status: 401 });
+  }
+
+  if (error instanceof ErrorSinPermiso) {
+    return NextResponse.json(cuerpoError("SIN_PERMISO", error.message), { status: 403 });
   }
 
   if (error instanceof ErrorNoEncontrado) {

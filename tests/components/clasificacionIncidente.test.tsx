@@ -69,4 +69,20 @@ describe("ClasificacionIncidente", () => {
 
     expect(contenedor.querySelector('[role="alert"]')?.textContent).toContain("No se pudo copiar");
   });
+
+  it("muestra la prioridad pendiente cuando el incidente no tiene tipo clasificado", async () => {
+    await act(async () => root.render(
+      <ClasificacionIncidente
+        incidente={{
+          ...incidente,
+          tipo_peligro: "Sin clasificar",
+          prioridad_asignada: null,
+          requiere_atencion_inmediata: null,
+        }}
+      />
+    ));
+
+    expect(contenedor.textContent).toContain("Prioridad pendiente de clasificación");
+    expect(contenedor.textContent).toContain("Atención inmediata pendiente de clasificación");
+  });
 });

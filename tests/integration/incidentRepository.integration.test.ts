@@ -2,7 +2,7 @@
 /**
  * Prueba REAL de persistencia (semana 13). Se ejecuta solo si hay base de PRUEBA configurada:
  *   TEST_SUPABASE_URL y TEST_SUPABASE_SERVICE_ROLE_KEY  (ver .env.example)
- * Requiere haber aplicado db/migrations/001 y db/seed/002.
+ * Requiere aplicar db/migrations/001-003 y ejecutar db/seed/002.
  */
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";

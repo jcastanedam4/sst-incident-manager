@@ -1,6 +1,12 @@
-import { GRAVEDADES, TIPOS_GTC45, type Gravedad, type TipoPeligro } from "@/types/incidentes";
+import {
+  GRAVEDADES,
+  TIPOS_GTC45,
+  TIPO_PELIGRO_SIN_CLASIFICAR,
+  type Gravedad,
+  type TipoPeligroRegistrado,
+} from "@/types/incidentes";
 import { ErrorValidacion, type DetalleValidacion } from "./errores";
-import type { NuevoIncidenteEntrada } from "./modelo";
+import type { ActualizarClasificacionEntrada, NuevoIncidenteEntrada } from "./modelo";
 
 export const LIMITE_TITULO = 150;
 export const LIMITE_DESCRIPCION = 2000;
@@ -41,10 +47,13 @@ export function validarNuevoIncidente(entrada: unknown): NuevoIncidenteEntrada {
 
   if (!esTexto(datos.tipo_peligro) || datos.tipo_peligro === "") {
     errores.push({ campo: "tipo_peligro", mensaje: "El tipo de peligro es obligatorio." });
-  } else if (!(TIPOS_GTC45 as readonly string[]).includes(datos.tipo_peligro)) {
+  } else if (
+    datos.tipo_peligro !== TIPO_PELIGRO_SIN_CLASIFICAR &&
+    !(TIPOS_GTC45 as readonly string[]).includes(datos.tipo_peligro)
+  ) {
     errores.push({
       campo: "tipo_peligro",
-      mensaje: `Tipo de peligro no permitido. Valores válidos: ${TIPOS_GTC45.join(", ")}.`,
+      mensaje: `Tipo de peligro no permitido. Valores válidos: ${[...TIPOS_GTC45, TIPO_PELIGRO_SIN_CLASIFICAR].join(", ")}.`,
     });
   }
 
@@ -64,7 +73,44 @@ export function validarNuevoIncidente(entrada: unknown): NuevoIncidenteEntrada {
   return {
     titulo,
     descripcion,
-    tipo_peligro: datos.tipo_peligro as TipoPeligro,
+    tipo_peligro: datos.tipo_peligro as TipoPeligroRegistrado,
+    gravedad: datos.gravedad as Gravedad,
+  };
+}
+
+export function validarActualizacionClasificacion(entrada: unknown): ActualizarClasificacionEntrada {
+  const errores: DetalleValidacion[] = [];
+
+  if (typeof entrada !== "object" || entrada === null || Array.isArray(entrada)) {
+    throw new ErrorValidacion([{ campo: "body", mensaje: "El cuerpo debe ser un objeto JSON." }]);
+  }
+
+  const datos = entrada as Record<string, unknown>;
+
+  if (
+    !esTexto(datos.tipo_peligro) ||
+    (datos.tipo_peligro !== TIPO_PELIGRO_SIN_CLASIFICAR &&
+      !(TIPOS_GTC45 as readonly string[]).includes(datos.tipo_peligro))
+  ) {
+    errores.push({
+      campo: "tipo_peligro",
+      mensaje: `Tipo de peligro no permitido. Valores válidos: ${[...TIPOS_GTC45, TIPO_PELIGRO_SIN_CLASIFICAR].join(", ")}.`,
+    });
+  }
+
+  if (!esTexto(datos.gravedad) || !(GRAVEDADES as readonly string[]).includes(datos.gravedad)) {
+    errores.push({
+      campo: "gravedad",
+      mensaje: `Gravedad no permitida. Valores válidos: ${GRAVEDADES.join(", ")}.`,
+    });
+  }
+
+  if (errores.length > 0) {
+    throw new ErrorValidacion(errores);
+  }
+
+  return {
+    tipo_peligro: datos.tipo_peligro as TipoPeligroRegistrado,
     gravedad: datos.gravedad as Gravedad,
   };
 }

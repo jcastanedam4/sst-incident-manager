@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Gravedad, Prioridad, TipoPeligro } from "@/types/incidentes";
-import { ErrorPersistencia } from "./errores";
-import type { IncidentRepository, IncidentePersistible, IncidenteClasificado } from "./modelo";
+import type { Gravedad, Prioridad } from "@/types/incidentes";
+import { ErrorNoEncontrado, ErrorPersistencia } from "./errores";
+import type {
+  ActualizarClasificacionEntrada,
+  ClasificacionPersistida,
+  IncidentRepository,
+  IncidentePersistible,
+  IncidenteClasificado,
+} from "./modelo";
+import type { TipoPeligroRegistrado } from "@/types/incidentes";
 
 const TABLA = "incidentes";
 const COLUMNAS =
@@ -11,10 +18,10 @@ type FilaIncidente = {
   id: string;
   titulo: string;
   descripcion: string;
-  tipo_peligro: TipoPeligro;
+  tipo_peligro: TipoPeligroRegistrado;
   gravedad: Gravedad;
-  prioridad_asignada: Prioridad;
-  requiere_atencion_inmediata: boolean;
+  prioridad_asignada: Prioridad | null;
+  requiere_atencion_inmediata: boolean | null;
   estado: string;
   created_at: string;
 };
@@ -45,6 +52,28 @@ export class SupabaseIncidentRepository implements IncidentRepository {
 
     if (error || !data) {
       throw new ErrorPersistencia("No fue posible guardar el incidente.", error);
+    }
+
+    return mapearFila(data as FilaIncidente);
+  }
+
+  async actualizarClasificacion(
+    id: string,
+    clasificacion: ActualizarClasificacionEntrada & ClasificacionPersistida
+  ): Promise<IncidenteClasificado> {
+    const { data, error } = await this.cliente
+      .from(TABLA)
+      .update(clasificacion)
+      .eq("id", id)
+      .select(COLUMNAS)
+      .maybeSingle();
+
+    if (error) {
+      throw new ErrorPersistencia("No fue posible actualizar la clasificación del incidente.", error);
+    }
+
+    if (!data) {
+      throw new ErrorNoEncontrado();
     }
 
     return mapearFila(data as FilaIncidente);

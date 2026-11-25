@@ -1,15 +1,15 @@
 import { supabase } from "@/utils/supabase";
-import type { Gravedad, TipoPeligro } from "@/types/incidentes";
+import type { Gravedad, TipoPeligro, TipoPeligroRegistrado } from "@/types/incidentes";
 
 /** Respuesta de la API (contrato de RF-01 y RF-02). */
 export type IncidenteClasificadoApi = {
   id: string;
   titulo: string;
   descripcion: string;
-  tipo_peligro: TipoPeligro;
+  tipo_peligro: TipoPeligroRegistrado;
   gravedad: Gravedad;
-  prioridad_asignada: "Alta" | "Media" | "Baja";
-  requiere_atencion_inmediata: boolean;
+  prioridad_asignada: "Alta" | "Media" | "Baja" | null;
+  requiere_atencion_inmediata: boolean | null;
   estado: string;
   fecha_registro: string;
 };
@@ -17,8 +17,17 @@ export type IncidenteClasificadoApi = {
 export type NuevoIncidenteApi = {
   titulo: string;
   descripcion: string;
-  tipo_peligro: string;
-  gravedad: string;
+  tipo_peligro: TipoPeligroRegistrado;
+  gravedad: Gravedad;
+};
+
+export type SugerenciaTipoRiesgoApi = {
+  tipo_peligro: TipoPeligro;
+};
+
+export type ActualizarClasificacionApi = {
+  tipo_peligro: TipoPeligroRegistrado;
+  gravedad: Gravedad;
 };
 
 /**
@@ -109,10 +118,26 @@ export const consultarIncidente = (id: string) =>
     "No se pudo consultar el incidente por un problema de conexión. Intenta de nuevo."
   );
 
+/** Admin: actualiza tipo/gravedad; el servidor calcula prioridad y atención inmediata. */
+export const actualizarClasificacionIncidente = (id: string, datos: ActualizarClasificacionApi) =>
+  llamarApi<IncidenteClasificadoApi>(
+    `/api/v1/incidentes/${encodeURIComponent(id.trim())}`,
+    { method: "PATCH", body: JSON.stringify(datos) },
+    "No se pudo actualizar la clasificación por un problema de conexión. Intenta de nuevo."
+  );
+
 /** Historial reciente del usuario autenticado; el servidor determina el propietario. */
 export const listarMisIncidentes = () =>
   llamarApi<IncidenteClasificadoApi[]>(
     "/api/v1/incidentes/mis-reportes",
     { method: "GET" },
     "No se pudieron cargar tus últimos reportes. Intenta de nuevo."
+  );
+
+/** Solicita una sugerencia local; empleado la aplica y admin puede modificarla. */
+export const sugerirTipoRiesgo = (descripcion: string, signal?: AbortSignal) =>
+  llamarApi<SugerenciaTipoRiesgoApi>(
+    "/api/v1/sugerir-tipo-riesgo",
+    { method: "POST", body: JSON.stringify({ descripcion }), signal },
+    "No se pudo obtener una sugerencia. Intenta de nuevo o reporta el incidente como Sin clasificar."
   );

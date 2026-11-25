@@ -8,14 +8,18 @@ en el proyecto a la fecha. La base del proyecto es Next.js App Router y Supabase
 | Operación | Ubicación | Método |
 |---|---|---|
 | Registrar y clasificar incidente | `/api/v1/incidentes` | `POST` |
+| Actualizar clasificación y gravedad (admin) | `/api/v1/incidentes/{id}` | `PATCH` |
 | Listar últimos reportes propios | `/api/v1/incidentes/mis-reportes` | `GET` |
 | Consultar incidente por ID | `/api/v1/incidentes/{id}` | `GET` |
+| Sugerir tipo de riesgo con BETO local | `/api/v1/sugerir-tipo-riesgo` | `POST` |
 | Registrar una evidencia | `/api/evidencias` | `POST` |
 | Exportar consolidado a Excel | `/api/export/excel` | `POST` |
 | Exportar indicadores a PDF | `/api/export/pdf` | `POST` |
 
 Los endpoints de incidentes siguen el corte vertical
 Interfaz -> API -> servicio -> repositorio -> Supabase.
+Para una base ya instalada, ejecutar `db/migrations/003_clasificacion_pendiente.sql`
+después de las migraciones 001 y 002.
 
 ## Convenciones
 
@@ -31,6 +35,105 @@ Interfaz -> API -> servicio -> repositorio -> Supabase.
 ---
 
 # API de incidentes
+
+## POST /api/v1/sugerir-tipo-riesgo
+
+Solicita una clasificación de riesgo. Requiere un JWT válido de Supabase y
+reenvía el texto al servicio privado de inferencia configurado en
+`RISK_MODEL_API_URL` (por defecto, `http://127.0.0.1:8000/predict`). La ruta no
+guarda el texto ni devuelve confianza probabilística.
+
+En el formulario del empleado, la interfaz combina título y descripción,
+solicita una predicción 250 ms después del último cambio y muestra el resultado
+en el campo de tipo de peligro, que es de solo lectura. En administración, la
+predicción propone el valor inicial del selector, pero el encargado puede
+cambiarlo. Si la IA no responde, el empleado puede continuar con `Sin
+clasificar`; el reporte queda pendiente de revisión.
+
+Request:
+
+```json
+{
+  "descripcion": "El trabajador se resbaló en una escalera mojada."
+}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "data": {
+    "tipo_peligro": "Seguridad"
+  }
+}
+```
+
+La API adapta las etiquetas originales del entrenamiento a los valores usados
+por la aplicación: `Condiciones de Seguridad` -> `Seguridad` y
+`Fenomenos Naturales` -> `Fenomeno natural`. La interfaz muestra `Seguridad`
+como `Condiciones de Seguridad`, pero conserva el valor interno `Seguridad`.
+
+Errores: `400 VALIDACION`, `401 NO_AUTORIZADO`, `503 IA_NO_DISPONIBLE`.
+
+### Servicio privado de inferencia
+
+El servicio Python en `ml_api/` ofrece `POST /predict` con
+`{"text":"..."}` y devuelve la etiqueta original del modelo, por ejemplo
+`{"label":"Condiciones de Seguridad"}`. La ruta Next.js la normaliza al valor
+de la aplicación. Está pensado para ejecutarse
+solo en el equipo o la red privada controlada; el comando de desarrollo debe
+ligarlo a `127.0.0.1`, no a una interfaz pública.
+
+`GET /health` comprueba que el servicio está activo y que el modelo se cargó:
+
+```json
+{
+  "status": "ok",
+  "device": "cpu"
+}
+```
+
+1. Obtén los artefactos BETO desde el ZIP de entrenamiento y colócalos en
+   `ml_api/models/beto_gtc45_model/` y
+   `ml_api/models/beto_gtc45_tokenizer/`. Los pesos están excluidos de Git.
+2. En PowerShell, crea y activa un entorno Python e instala dependencias:
+
+   ```powershell
+   py -m venv .venv-ml
+   .\.venv-ml\Scripts\Activate.ps1
+   python -m pip install -r ml_api\requirements.txt
+   ```
+3. En una terminal, inicia el modelo local:
+
+   ```powershell
+   python -m uvicorn ml_api.main:app --host 127.0.0.1 --port 8000
+   ```
+4. Comprueba que cargó el modelo antes de abrir la aplicación:
+
+   ```powershell
+   Invoke-RestMethod -Uri http://127.0.0.1:8000/health
+   ```
+
+5. En otra terminal, inicia la app con `npm run dev` e inicia sesión. La UI
+   consulta la sugerencia 250 ms después del último cambio en título o
+   descripción, enviando ambos textos como contexto.
+
+Si la interfaz muestra `Sin clasificar` y avisa que no obtuvo predicción,
+comprueba `/health`, que Uvicorn siga ejecutándose en el puerto 8000, y los
+mensajes del proceso Next.js. Un `503 IA_NO_DISPONIBLE` indica que la ruta de
+Next.js no recibió una respuesta válida del servicio Python.
+
+El servicio no registra ni persiste los textos de entrada. La aplicación
+Next.js protege su ruta con autenticación y reenvía las descripciones al
+servicio local. No despliegues esta configuración a una plataforma cloud:
+la política actual requiere mantener la ruta del texto y el modelo en
+infraestructura controlada.
+
+El cuaderno usa el conjunto de prueba como `eval_dataset` al seleccionar el
+mejor modelo. Por ello, las métricas guardadas no constituyen una evaluación
+independiente final; antes de usar el modelo en producción, vuelve a entrenar/
+seleccionar con un conjunto de validación y reserva el test para una única
+medición final.
 
 ## POST /api/v1/incidentes
 
@@ -55,11 +158,13 @@ Campos:
 |---|---|---:|---|
 | `titulo` | string | Sí | Texto no vacío |
 | `descripcion` | string | Sí | Texto no vacío |
-| `tipo_peligro` | string | Sí | Fisico, Quimico, Biologico, Biomecanico, Psicosocial, Seguridad, Fenomeno natural |
+| `tipo_peligro` | string | Sí | Fisico, Quimico, Biologico, Biomecanico, Psicosocial, Seguridad, Fenomeno natural, Sin clasificar |
 | `gravedad` | string | Sí | Baja, Media, Alta |
 
 La prioridad enviada por el cliente no se utiliza. La prioridad y la atención
-inmediata se calculan en el backend.
+inmediata se calculan en el backend. Si no se obtuvo una predicción, se acepta
+`Sin clasificar` y ambos campos de prioridad quedan en `null` hasta que admin
+asigne un tipo válido.
 
 Response `201 Created`:
 
@@ -81,6 +186,25 @@ Response `201 Created`:
 
 El encabezado `Location` contiene
 `/api/v1/incidentes/{id}`.
+
+## PATCH /api/v1/incidentes/{id}
+
+Actualiza tipo de peligro y gravedad. Solo permite usuarios con rol admin en
+`app_metadata` o la cuenta SST configurada. El backend recalcula prioridad y
+atención inmediata; si el tipo queda como `Sin clasificar`, los resultados
+siguen pendientes (`null`).
+
+Request:
+
+```json
+{
+  "tipo_peligro": "Seguridad",
+  "gravedad": "Alta"
+}
+```
+
+Errores: `400 VALIDACION`, `401 NO_AUTORIZADO`, `403 SIN_PERMISO`,
+`404 NO_ENCONTRADO`.
 
 ## GET /api/v1/incidentes/{id}
 
@@ -144,15 +268,16 @@ Response `200 OK`:
 
 ## Matriz de priorización
 
-| Condición | Prioridad | Atención inmediata |
-|---|---|---|
-| Peligro biológico o químico | Alta | Sí |
-| Gravedad Alta | Alta | Sí |
-| Gravedad Media | Media | No |
-| Gravedad Baja | Baja | No |
+| Tipo de peligro | Gravedad Baja | Gravedad Media | Gravedad Alta |
+|---|---|---|---|
+| Biológico o químico | Alta, inmediata | Alta, inmediata | Alta, inmediata |
+| Seguridad o fenómeno natural | Media | Alta, inmediata | Alta, inmediata |
+| Físico | Media | Media | Alta, inmediata |
+| Biomecánico o psicosocial | Baja | Media | Alta, inmediata |
 
-La selección de prioridad debe realizarse solo en
-`lib/incidentes/evaluadorRiesgo.ts`.
+`Sin clasificar` deja prioridad y atención inmediata pendientes (`null`). Admin
+debe asignar un tipo válido; entonces el backend vuelve a calcular ambos campos.
+La regla está centralizada en `lib/incidentes/evaluadorRiesgo.ts`.
 
 ## Errores de incidentes
 
@@ -177,6 +302,7 @@ Los errores de incidentes usan el siguiente formato:
 |---:|---|---|
 | `400` | `VALIDACION` | JSON inválido o campos incorrectos |
 | `401` | `NO_AUTORIZADO` | Falta el bearer token o el JWT no es válido |
+| `403` | `SIN_PERMISO` | El usuario autenticado no tiene rol administrador para `PATCH` |
 | `404` | `NO_ENCONTRADO` | El incidente no existe o no está disponible según las políticas RLS |
 | `500` | `ERROR_INTERNO` | Error interno o de persistencia; no expone detalles técnicos |
 

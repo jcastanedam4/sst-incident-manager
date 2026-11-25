@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ErrorNoAutorizado, ErrorPersistencia } from "@/lib/incidentes/errores";
+import { ErrorNoAutorizado, ErrorPersistencia, ErrorSinPermiso } from "@/lib/incidentes/errores";
 import { IncidentService } from "@/lib/incidentes/incidentService";
 import type { IncidenteClasificado } from "@/lib/incidentes/modelo";
 
@@ -9,22 +9,34 @@ const guardado: IncidenteClasificado = {
   prioridad_asignada: "Alta", requiere_atencion_inmediata: true, estado: "Abierto", fecha_registro: "2026-11-02T08:00:00.000Z",
 };
 
-const repo = { guardar: vi.fn(), buscarPorId: vi.fn(), buscarUltimosPorUsuario: vi.fn() };
+const repo = {
+  guardar: vi.fn(),
+  actualizarClasificacion: vi.fn(),
+  buscarPorId: vi.fn(),
+  buscarUltimosPorUsuario: vi.fn(),
+};
 
 vi.mock("@/lib/incidentes/contexto", () => ({
   autenticar: vi.fn(),
+  autenticarAdministrador: vi.fn(),
   crearIncidentService: vi.fn(() => new IncidentService(repo)),
 }));
 
 import { autenticar } from "@/lib/incidentes/contexto";
+import { autenticarAdministrador } from "@/lib/incidentes/contexto";
 import { POST } from "@/app/api/v1/incidentes/route";
-import { GET } from "@/app/api/v1/incidentes/[id]/route";
+import { GET, PATCH } from "@/app/api/v1/incidentes/[id]/route";
 import { GET as GETMisReportes } from "@/app/api/v1/incidentes/mis-reportes/route";
 
 const post = (cuerpo: unknown, crudo = false) =>
   POST(new Request("http://localhost/api/v1/incidentes", { method: "POST", body: crudo ? (cuerpo as string) : JSON.stringify(cuerpo) }));
 const get = (id: string) =>
   GET(new Request(`http://localhost/api/v1/incidentes/${id}`), { params: Promise.resolve({ id }) });
+const patch = (id: string, cuerpo: unknown) =>
+  PATCH(
+    new Request(`http://localhost/api/v1/incidentes/${id}`, { method: "PATCH", body: JSON.stringify(cuerpo) }),
+    { params: Promise.resolve({ id }) }
+  );
 const getMisReportes = (query = "") =>
   GETMisReportes(new Request(`http://localhost/api/v1/incidentes/mis-reportes${query}`));
 
@@ -34,6 +46,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.mocked(autenticar).mockResolvedValue({ usuario: { id: "u1", email: "e@empresa.com" }, cliente: {} as never });
+  vi.mocked(autenticarAdministrador).mockResolvedValue({
+    usuario: { id: "admin1", email: "encargado.sst@empresa.com" },
+    cliente: {} as never,
+    rol: "ADMIN",
+  });
   repo.buscarUltimosPorUsuario.mockResolvedValue([]);
 });
 
@@ -51,6 +68,31 @@ describe("POST /api/v1/incidentes (RF-01)", () => {
     expect(r.status).toBe(400);
     expect((await r.json()).error.codigo).toBe("VALIDACION");
     expect(repo.guardar).not.toHaveBeenCalled();
+  });
+
+  it("permite registrar Sin clasificar con prioridad y atención pendientes", async () => {
+    repo.guardar.mockResolvedValue({
+      ...guardado,
+      tipo_peligro: "Sin clasificar",
+      prioridad_asignada: null,
+      requiere_atencion_inmediata: null,
+    });
+
+    const r = await post({ ...valido, tipo_peligro: "Sin clasificar" });
+
+    expect(r.status).toBe(201);
+    expect((await r.json()).data).toMatchObject({
+      tipo_peligro: "Sin clasificar",
+      prioridad_asignada: null,
+      requiere_atencion_inmediata: null,
+    });
+    expect(repo.guardar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo_peligro: "Sin clasificar",
+        prioridad_asignada: null,
+        requiere_atencion_inmediata: null,
+      })
+    );
   });
 
   it("400 por JSON malformado", async () => {
@@ -78,6 +120,43 @@ describe("GET /api/v1/incidentes/{id} (RF-02)", () => {
     const r = await get(ID);
     expect(r.status).toBe(200);
     expect((await r.json()).data.id).toBe(ID);
+  });
+
+  describe("PATCH /api/v1/incidentes/{id}", () => {
+    it("requiere admin y recalcula prioridad según tipo y gravedad", async () => {
+      repo.actualizarClasificacion.mockResolvedValue({
+        ...guardado,
+        tipo_peligro: "Seguridad",
+        gravedad: "Baja",
+        prioridad_asignada: "Media",
+        requiere_atencion_inmediata: false,
+      });
+
+      const r = await patch(ID, { tipo_peligro: "Seguridad", gravedad: "Baja" });
+
+      expect(r.status).toBe(200);
+      expect((await r.json()).data).toMatchObject({
+        tipo_peligro: "Seguridad",
+        gravedad: "Baja",
+        prioridad_asignada: "Media",
+        requiere_atencion_inmediata: false,
+      });
+      expect(repo.actualizarClasificacion).toHaveBeenCalledWith(ID, {
+        tipo_peligro: "Seguridad",
+        gravedad: "Baja",
+        prioridad_asignada: "Media",
+        requiere_atencion_inmediata: false,
+      });
+    });
+
+    it("rechaza datos inválidos y usuarios sin permisos", async () => {
+      expect((await patch(ID, { tipo_peligro: "Quimico", gravedad: "Crítica" })).status).toBe(400);
+      expect(repo.actualizarClasificacion).not.toHaveBeenCalled();
+
+      vi.mocked(autenticarAdministrador).mockRejectedValue(new ErrorSinPermiso());
+      expect((await patch(ID, { tipo_peligro: "Quimico", gravedad: "Media" })).status).toBe(403);
+      expect(repo.actualizarClasificacion).not.toHaveBeenCalled();
+    });
   });
 
   it("404 si no existe", async () => {

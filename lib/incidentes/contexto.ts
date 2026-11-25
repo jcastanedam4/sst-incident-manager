@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { ErrorNoAutorizado } from "./errores";
+import { ErrorNoAutorizado, ErrorSinPermiso } from "./errores";
 import { IncidentService } from "./incidentService";
 import type { UsuarioAutenticado } from "./modelo";
 import { SupabaseIncidentRepository } from "./supabaseIncidentRepository";
@@ -7,7 +7,10 @@ import { SupabaseIncidentRepository } from "./supabaseIncidentRepository";
 export type ContextoSolicitud = {
   usuario: UsuarioAutenticado;
   cliente: SupabaseClient;
+  rol?: "ADMIN" | "EMPLEADO";
 };
+
+const CORREO_ADMINISTRADOR = "encargado.sst@empresa.com";
 
 const extraerToken = (request: Request): string | null => {
   const encabezado = request.headers.get("authorization") ?? "";
@@ -41,7 +44,24 @@ export async function autenticar(request: Request): Promise<ContextoSolicitud> {
     throw new ErrorNoAutorizado();
   }
 
-  return { usuario: { id: data.user.id, email: data.user.email }, cliente };
+  const rolApp = data.user.app_metadata?.role;
+  const esAdministrador =
+    (typeof rolApp === "string" && rolApp.trim().toUpperCase() === "ADMIN") ||
+    data.user.email.trim().toLowerCase() === CORREO_ADMINISTRADOR;
+
+  return {
+    usuario: { id: data.user.id, email: data.user.email },
+    cliente,
+    rol: esAdministrador ? "ADMIN" : "EMPLEADO",
+  };
+}
+
+export async function autenticarAdministrador(request: Request): Promise<ContextoSolicitud> {
+  const contexto = await autenticar(request);
+  if (contexto.rol !== "ADMIN") {
+    throw new ErrorSinPermiso();
+  }
+  return contexto;
 }
 
 /** Punto único de composición: servicio + repositorio real. */

@@ -1,7 +1,8 @@
 import { ErrorNoEncontrado } from "./errores";
 import { EvaluadorRiesgoService } from "./evaluadorRiesgo";
-import type { IncidentRepository, IncidenteClasificado, UsuarioAutenticado } from "./modelo";
-import { validarIdIncidente, validarNuevoIncidente } from "./validacion";
+import { TIPO_PELIGRO_SIN_CLASIFICAR } from "@/types/incidentes";
+import type { ActualizarClasificacionEntrada, IncidentRepository, IncidenteClasificado, UsuarioAutenticado } from "./modelo";
+import { validarActualizacionClasificacion, validarIdIncidente, validarNuevoIncidente } from "./validacion";
 
 const LIMITE_HISTORIAL = 5;
 
@@ -19,7 +20,10 @@ export class IncidentService {
 
   async registrar(entrada: unknown, usuario: UsuarioAutenticado): Promise<IncidenteClasificado> {
     const datos = validarNuevoIncidente(entrada);
-    const clasificacion = this.evaluador.evaluar(datos.tipo_peligro, datos.gravedad);
+    const clasificacion =
+      datos.tipo_peligro === TIPO_PELIGRO_SIN_CLASIFICAR
+        ? { prioridad_asignada: null, requiere_atencion_inmediata: null }
+        : this.evaluador.evaluar(datos.tipo_peligro, datos.gravedad);
 
     return this.repositorio.guardar({
       ...datos,
@@ -28,6 +32,17 @@ export class IncidentService {
       user_id: usuario.id,
       user_email: usuario.email,
     });
+  }
+
+  async actualizarClasificacion(id: unknown, entrada: unknown): Promise<IncidenteClasificado> {
+    const idValido = validarIdIncidente(id);
+    const datos: ActualizarClasificacionEntrada = validarActualizacionClasificacion(entrada);
+    const clasificacion =
+      datos.tipo_peligro === TIPO_PELIGRO_SIN_CLASIFICAR
+        ? { prioridad_asignada: null, requiere_atencion_inmediata: null }
+        : this.evaluador.evaluar(datos.tipo_peligro, datos.gravedad);
+
+    return this.repositorio.actualizarClasificacion(idValido, { ...datos, ...clasificacion });
   }
 
   async consultarPorId(id: unknown): Promise<IncidenteClasificado> {

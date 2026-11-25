@@ -25,6 +25,20 @@ class RepositorioSimulado implements IncidentRepository {
     return guardado;
   }
 
+  async actualizarClasificacion(
+    id: string,
+    clasificacion: Parameters<IncidentRepository["actualizarClasificacion"]>[1]
+  ): Promise<IncidenteClasificado> {
+    const actual = this.almacen.get(id);
+    if (!actual) {
+      throw new ErrorNoEncontrado();
+    }
+
+    const actualizado = { ...actual, ...clasificacion };
+    this.almacen.set(id, actualizado);
+    return actualizado;
+  }
+
 
   async buscarPorId(id: string) {
     return this.almacen.get(id) ?? null;
@@ -74,6 +88,19 @@ describe("IncidentService — RF-01 registrar", () => {
     expect(r).toMatchObject({ prioridad_asignada: "Baja", requiere_atencion_inmediata: false });
   });
 
+  it("permite registrar sin predicción y deja prioridad pendiente", async () => {
+    const r = await servicio.registrar(
+      { ...entrada, tipo_peligro: "Sin clasificar" },
+      usuario
+    );
+
+    expect(r).toMatchObject({
+      tipo_peligro: "Sin clasificar",
+      prioridad_asignada: null,
+      requiere_atencion_inmediata: null,
+    });
+  });
+
 
   it("ignora la prioridad enviada por el cliente (no hay bypass)", async () => {
     await servicio.registrar({ ...entrada, prioridad_asignada: "Baja", requiere_atencion_inmediata: false }, usuario);
@@ -102,6 +129,41 @@ describe("IncidentService — RF-02 consultar", () => {
 
     await expect(new IncidentService(repo).listarUltimosPorUsuario(usuario)).resolves.toEqual(reportes);
     expect(buscarUltimos).toHaveBeenCalledWith(usuario.id, usuario.email, 5);
+  });
+
+  describe("IncidentService — actualizar clasificación", () => {
+    it("recalcula prioridad y atención inmediata al asignar un tipo válido", async () => {
+      const repo = new RepositorioSimulado();
+      const servicio = new IncidentService(repo);
+      await servicio.registrar({ ...entrada, tipo_peligro: "Sin clasificar" }, usuario);
+
+      const actualizado = await servicio.actualizarClasificacion(ID, {
+        tipo_peligro: "Seguridad",
+        gravedad: "Baja",
+      });
+
+      expect(actualizado).toMatchObject({
+        tipo_peligro: "Seguridad",
+        gravedad: "Baja",
+        prioridad_asignada: "Media",
+        requiere_atencion_inmediata: false,
+      });
+    });
+
+    it("mantiene la prioridad pendiente si el tipo sigue sin clasificar", async () => {
+      const repo = new RepositorioSimulado();
+      const servicio = new IncidentService(repo);
+      await servicio.registrar({ ...entrada, tipo_peligro: "Sin clasificar" }, usuario);
+
+      await expect(
+        servicio.actualizarClasificacion(ID, { tipo_peligro: "Sin clasificar", gravedad: "Alta" })
+      ).resolves.toMatchObject({
+        tipo_peligro: "Sin clasificar",
+        gravedad: "Alta",
+        prioridad_asignada: null,
+        requiere_atencion_inmediata: null,
+      });
+    });
   });
 
   it("devuelve un incidente existente", async () => {

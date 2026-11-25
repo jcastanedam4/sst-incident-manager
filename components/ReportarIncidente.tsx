@@ -3,10 +3,19 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import Image from "next/image";
-import { GRAVEDADES, TIPOS_GTC45 } from "@/types/incidentes";
+import {
+  GRAVEDADES,
+  TIPO_PELIGRO_SIN_CLASIFICAR,
+  type Gravedad,
+  type TipoPeligro,
+} from "@/types/incidentes";
 import { esAplicacionNativa } from "@/utils/capacitor";
 import { subirEvidencia } from "@/utils/evidencias";
-import { crearIncidente, type IncidenteClasificadoApi } from "@/utils/incidentesApi";
+import {
+  crearIncidente,
+  sugerirTipoRiesgo,
+  type IncidenteClasificadoApi,
+} from "@/utils/incidentesApi";
 import { guardarUltimoIncidenteId } from "@/utils/ultimoIncidente";
 import ClasificacionIncidente from "./ClasificacionIncidente";
 
@@ -16,6 +25,8 @@ type Props = {
 };
 
 type Aviso = { tipo: "validacion" | "negocio" | "comunicacion" | "advertencia"; texto: string };
+type EstadoSugerencia = "inactiva" | "consultando" | "lista" | "error";
+const DEMORA_SUGERENCIA_MS = 250;
 
 const CLASES_CAMPO =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200";
@@ -33,11 +44,14 @@ const mensajeErrorCamara = (error: unknown) =>
     ? "No se concedió permiso para usar la cámara. Revisa los permisos del navegador o dispositivo."
     : "No se pudo abrir la cámara. Revisa los permisos e inténtalo de nuevo.";
 
+const etiquetaTipoPeligro = (tipo: TipoPeligro) =>
+  tipo === "Seguridad" ? "Condiciones de Seguridad" : tipo;
+
 export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: Props) {
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
-  const [tipoPeligro, setTipoPeligro] = useState("");
-  const [gravedad, setGravedad] = useState("");
+  const [tipoPeligro, setTipoPeligro] = useState<string>(TIPO_PELIGRO_SIN_CLASIFICAR);
+  const [gravedad, setGravedad] = useState<Gravedad | "">("");
   const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [subiendoEvidencia, setSubiendoEvidencia] = useState(false);
@@ -46,8 +60,39 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
   const [erroresCampo, setErroresCampo] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<IncidenteClasificadoApi | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
+  const [sugerenciaTipo, setSugerenciaTipo] = useState<TipoPeligro | null>(null);
+  const [estadoSugerencia, setEstadoSugerencia] = useState<EstadoSugerencia>("inactiva");
   const enviandoRef = useRef(false); // evita envíos simultáneos aunque React aún no haya re-renderizado
   const inputArchivoRef = useRef<HTMLInputElement | null>(null);
+  const textoParaClasificar = [titulo.trim(), descripcion.trim()].filter(Boolean).join("\n");
+
+  useEffect(() => {
+    if (!textoParaClasificar) {
+      return;
+    }
+
+    const controlador = new AbortController();
+    const temporizador = window.setTimeout(async () => {
+      const resultadoSugerencia = await sugerirTipoRiesgo(textoParaClasificar, controlador.signal);
+
+      if (controlador.signal.aborted) {
+        return;
+      }
+
+      if (resultadoSugerencia.ok) {
+        setSugerenciaTipo(resultadoSugerencia.data.tipo_peligro);
+        setTipoPeligro(resultadoSugerencia.data.tipo_peligro);
+        setEstadoSugerencia("lista");
+      } else {
+        setEstadoSugerencia("error");
+      }
+    }, DEMORA_SUGERENCIA_MS);
+
+    return () => {
+      window.clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [textoParaClasificar]);
 
   useEffect(() => {
     if (!archivoAdjunto?.type.startsWith("image/")) {
@@ -133,13 +178,14 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
     setAviso(null);
     setErroresCampo({});
 
-    const erroresSeleccion: Record<string, string> = {};
-    if (!tipoPeligro) erroresSeleccion.tipo_peligro = "Selecciona un tipo de peligro.";
-    if (!gravedad) erroresSeleccion.gravedad = "Selecciona la gravedad.";
+    if (!gravedad) {
+      setErroresCampo({ gravedad: "Selecciona la gravedad." });
+      setAviso({ tipo: "validacion", texto: "Completa la gravedad antes de enviarlo." });
+      return;
+    }
 
-    if (Object.keys(erroresSeleccion).length > 0) {
-      setErroresCampo(erroresSeleccion);
-      setAviso({ tipo: "validacion", texto: "Completa la clasificación del incidente antes de enviarlo." });
+    if (estadoSugerencia === "consultando") {
+      setAviso({ tipo: "validacion", texto: "Espera a que termine la clasificación automática antes de enviar." });
       return;
     }
 
@@ -148,7 +194,8 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
     setResultado(null);
 
     try {
-      const respuesta = await crearIncidente({ titulo, descripcion, tipo_peligro: tipoPeligro, gravedad });
+      const tipoParaEnviar = sugerenciaTipo ?? TIPO_PELIGRO_SIN_CLASIFICAR;
+      const respuesta = await crearIncidente({ titulo, descripcion, tipo_peligro: tipoParaEnviar, gravedad });
 
       if (!respuesta.ok) {
         // Los campos se conservan: solo se limpian tras confirmación del backend.
@@ -162,6 +209,9 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
       const incidente = respuesta.data;
       setResultado(incidente);
       const advertencias: string[] = [];
+      if (tipoParaEnviar === TIPO_PELIGRO_SIN_CLASIFICAR) {
+        advertencias.push("El reporte quedó sin tipo de peligro y requiere revisión del encargado SST.");
+      }
 
       try {
         guardarUltimoIncidenteId(incidente.id);
@@ -190,7 +240,9 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
 
       setTitulo("");
       setDescripcion("");
-      setTipoPeligro("");
+      setSugerenciaTipo(null);
+      setEstadoSugerencia("inactiva");
+      setTipoPeligro(TIPO_PELIGRO_SIN_CLASIFICAR);
       setGravedad("");
       setArchivoAdjunto(null);
       if (inputArchivoRef.current) inputArchivoRef.current.value = "";
@@ -226,7 +278,13 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
           <input
             id="titulo"
             value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
+            onChange={(e) => {
+              const nuevoTitulo = e.target.value;
+              setTitulo(nuevoTitulo);
+              setSugerenciaTipo(null);
+              setTipoPeligro(TIPO_PELIGRO_SIN_CLASIFICAR);
+              setEstadoSugerencia(nuevoTitulo.trim() || descripcion.trim() ? "consultando" : "inactiva");
+            }}
             style={ESTILO_TEXTO}
             className={CLASES_CAMPO}
             placeholder="Ejemplo: Derrame en área de producción"
@@ -243,7 +301,13 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
             id="descripcion"
             rows={4}
             value={descripcion}
-            onChange={(e) => setDescripcion(e.target.value)}
+            onChange={(e) => {
+              const nuevaDescripcion = e.target.value;
+              setDescripcion(nuevaDescripcion);
+              setSugerenciaTipo(null);
+              setTipoPeligro(TIPO_PELIGRO_SIN_CLASIFICAR);
+              setEstadoSugerencia(nuevaDescripcion.trim() || titulo.trim() ? "consultando" : "inactiva");
+            }}
             style={ESTILO_TEXTO}
             className={CLASES_CAMPO}
             placeholder="Describe el incidente y el riesgo asociado."
@@ -252,24 +316,37 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
             aria-describedby={erroresCampo.descripcion ? "error-descripcion" : undefined}
           />
           {errorCampo("descripcion")}
+          <div className="mt-2 min-h-6" aria-live="polite">
+            {estadoSugerencia === "consultando" && (
+              <p role="status" className="text-sm text-zinc-600">Buscando una sugerencia de riesgo...</p>
+            )}
+            {estadoSugerencia === "lista" && sugerenciaTipo && (
+              <div role="status" className="text-sm text-blue-800">
+                Clasificación automática lista: <strong>{etiquetaTipoPeligro(sugerenciaTipo)}</strong>.
+              </div>
+            )}
+            {estadoSugerencia === "error" && (
+              <p className="text-sm text-amber-800">
+                No se pudo obtener la clasificación automática. El reporte podrá enviarse como “Sin clasificar” para revisión del encargado.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="tipoPeligro" className="mb-1 block text-sm font-medium text-zinc-700">Tipo de peligro (GTC 45)</label>
-            <select
+            <input
               id="tipoPeligro"
-              value={tipoPeligro}
-              onChange={(e) => setTipoPeligro(e.target.value)}
-              style={ESTILO_TEXTO}
-              className={CLASES_CAMPO}
-              required
+              type="text"
+              value={tipoPeligro === "Seguridad" ? "Condiciones de Seguridad" : tipoPeligro}
+              readOnly
+              aria-readonly="true"
+              style={{ ...ESTILO_TEXTO, caretColor: "transparent" }}
+              className={`${CLASES_CAMPO} cursor-not-allowed bg-zinc-50`}
               aria-invalid={Boolean(erroresCampo.tipo_peligro)}
               aria-describedby={erroresCampo.tipo_peligro ? "error-tipo_peligro" : undefined}
-            >
-              <option value="" disabled>Selecciona el tipo de peligro</option>
-              {TIPOS_GTC45.map((tipo) => (<option key={tipo} value={tipo}>{tipo}</option>))}
-            </select>
+            />
             {errorCampo("tipo_peligro")}
           </div>
           <div>
@@ -277,7 +354,7 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
             <select
               id="gravedad"
               value={gravedad}
-              onChange={(e) => setGravedad(e.target.value)}
+              onChange={(e) => setGravedad(GRAVEDADES.find((valor) => valor === e.target.value) ?? "")}
               style={ESTILO_TEXTO}
               className={CLASES_CAMPO}
               required
@@ -368,7 +445,11 @@ export default function ReportarIncidente({ onIncidenteCreado, onIrAConsulta }: 
 
       {resultado && (
         <div role="status" className="mt-4">
-          <p className="text-sm font-semibold text-emerald-700">Incidente registrado y clasificado por el sistema.</p>
+          <p className="text-sm font-semibold text-emerald-700">
+            {resultado.tipo_peligro === TIPO_PELIGRO_SIN_CLASIFICAR
+              ? "Incidente registrado y pendiente de clasificación."
+              : "Incidente registrado y clasificado por el sistema."}
+          </p>
           <ClasificacionIncidente incidente={resultado} />
           {onIrAConsulta && (
             <button

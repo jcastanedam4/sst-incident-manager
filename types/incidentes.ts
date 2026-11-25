@@ -62,6 +62,10 @@ export const TIPOS_GTC45 = [
 
 export type TipoPeligro = (typeof TIPOS_GTC45)[number];
 
+export const TIPO_PELIGRO_SIN_CLASIFICAR = "Sin clasificar" as const;
+
+export type TipoPeligroRegistrado = TipoPeligro | typeof TIPO_PELIGRO_SIN_CLASIFICAR;
+
 export const GRAVEDADES = ["Baja", "Media", "Alta"] as const;
 
 export type Gravedad = (typeof GRAVEDADES)[number];

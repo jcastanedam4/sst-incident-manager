@@ -1,4 +1,4 @@
-import type { Gravedad, Prioridad, TipoPeligro } from "@/types/incidentes";
+import type { Gravedad, Prioridad, TipoPeligroRegistrado } from "@/types/incidentes";
 
 /** Resultado de aplicar la matriz de priorización. */
 export type ClasificacionRiesgo = {
@@ -6,29 +6,42 @@ export type ClasificacionRiesgo = {
   requiere_atencion_inmediata: boolean;
 };
 
+export type ClasificacionPendiente = {
+  prioridad_asignada: null;
+  requiere_atencion_inmediata: null;
+};
+
+export type ClasificacionPersistida = {
+  prioridad_asignada: Prioridad | null;
+  requiere_atencion_inmediata: boolean | null;
+};
+
 /** Datos de entrada ya validados por el servicio. */
 export type NuevoIncidenteEntrada = {
   titulo: string;
   descripcion: string;
-  tipo_peligro: TipoPeligro;
+  tipo_peligro: TipoPeligroRegistrado;
+  gravedad: Gravedad;
+};
+
+export type ActualizarClasificacionEntrada = {
+  tipo_peligro: TipoPeligroRegistrado;
   gravedad: Gravedad;
 };
 
 /** Registro que el servicio entrega al repositorio: entrada + clasificación + trazabilidad. */
-export type IncidentePersistible = NuevoIncidenteEntrada &
-  ClasificacionRiesgo & {
-    estado: "Abierto";
-    user_id: string | null;
-    user_email: string | null;
-  };
+export type IncidentePersistible = NuevoIncidenteEntrada & ClasificacionPersistida & {
+  estado: "Abierto";
+  user_id: string | null;
+  user_email: string | null;
+};
 
 /** Incidente tal como se devuelve al consumidor de la API (RF-01 y RF-02). */
-export type IncidenteClasificado = NuevoIncidenteEntrada &
-  ClasificacionRiesgo & {
-    id: string;
-    estado: string;
-    fecha_registro: string;
-  };
+export type IncidenteClasificado = NuevoIncidenteEntrada & ClasificacionPersistida & {
+  id: string;
+  estado: string;
+  fecha_registro: string;
+};
 
 export type UsuarioAutenticado = {
   id: string;
@@ -47,6 +60,10 @@ export type UsuarioAutenticado = {
  */
 export interface IncidentRepository {
   guardar(incidente: IncidentePersistible): Promise<IncidenteClasificado>;
+  actualizarClasificacion(
+    id: string,
+    clasificacion: ActualizarClasificacionEntrada & ClasificacionPersistida
+  ): Promise<IncidenteClasificado>;
   buscarPorId(id: string): Promise<IncidenteClasificado | null>;
   buscarUltimosPorUsuario(userId: string, email: string, limite: number): Promise<IncidenteClasificado[]>;
 }

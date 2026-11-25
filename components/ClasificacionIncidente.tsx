@@ -71,17 +71,25 @@ export default function ClasificacionIncidente({ incidente }: { incidente: Incid
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 pt-1">
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-bold ${COLOR_PRIORIDAD[incidente.prioridad_asignada] ?? ""}`}
-        >
-          Prioridad {incidente.prioridad_asignada}
-        </span>
-        {incidente.requiere_atencion_inmediata ? (
+        {incidente.prioridad_asignada ? (
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-bold ${COLOR_PRIORIDAD[incidente.prioridad_asignada]}`}
+          >
+            Prioridad {incidente.prioridad_asignada}
+          </span>
+        ) : (
+          <span className="rounded-full border border-zinc-300 bg-zinc-100 px-3 py-1 text-xs font-bold text-zinc-700">
+            Prioridad pendiente de clasificación
+          </span>
+        )}
+        {incidente.requiere_atencion_inmediata === true ? (
           <span className="rounded-full border border-red-300 bg-red-600 px-3 py-1 text-xs font-bold text-white">
             Atención inmediata
           </span>
-        ) : (
+        ) : incidente.requiere_atencion_inmediata === false ? (
           <span className="text-xs text-zinc-600">No requiere atención inmediata</span>
+        ) : (
+          <span className="text-xs text-zinc-600">Atención inmediata pendiente de clasificación</span>
         )}
       </div>
     </dl>

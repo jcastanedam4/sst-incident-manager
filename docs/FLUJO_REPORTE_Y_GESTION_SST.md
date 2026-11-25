@@ -22,6 +22,9 @@ Documentar el flujo funcional completo del sistema, desde el ingreso hasta la ge
 2. Tablas en Supabase creadas: `incidentes`, `medidas_correctivas`, `audit_logs`.
 3. Trigger de auditoria activo sobre `incidentes`.
 4. Bucket de storage para evidencias: `evidencias-incidentes`.
+5. Para usar la clasificación automática: modelo local instalado y API FastAPI
+   activa en `http://127.0.0.1:8000`. Si no está disponible, el reporte puede
+   quedar pendiente como `Sin clasificar`.
 
 ## Flujo 1 - Ingreso y asignacion de rol
 
@@ -50,12 +53,22 @@ Ruta: `/dashboard/empleado`
 
 - Titulo.
 - Descripcion.
-- Tipo de peligro (GTC 45).
+- Gravedad.
 - Evidencia multimedia (opcional).
+
+1. Al escribir el título o la descripción:
+
+- La interfaz envía ambos textos a la API de sugerencia después de una pausa
+  de 250 ms.
+- El tipo sugerido aparece automáticamente en el campo de peligro GTC 45, que
+  no se puede editar.
 
 1. Al enviar:
 
-- Se inserta el incidente en Supabase.
+- La ruta `POST /api/v1/incidentes` valida el reporte, calcula la prioridad y
+  persiste el incidente mediante el servicio y repositorio.
+- Si la IA no respondió, el campo se guarda como `Sin clasificar`, con prioridad
+  y atención inmediata pendientes hasta la revisión administrativa.
 - Se intenta subir evidencia a Storage.
 - Se guarda URL publica de evidencia (si aplica).
 
@@ -86,6 +99,11 @@ Ruta: `/dashboard/admin`
 
 1. En modal de revision:
 
+- Recibe una sugerencia de tipo de peligro que puede modificar.
+- Puede modificar la gravedad.
+- Al guardar tipo o gravedad, la ruta protegida
+  `PATCH /api/v1/incidentes/{id}` recalcula prioridad y atención inmediata en
+  backend. El cambio queda en la bitácora de auditoría de Supabase.
 - Define prioridad.
 - Registra medida correctiva.
 - Guarda revision (inserta en `medidas_correctivas`).
@@ -159,6 +177,14 @@ Resultado esperado:
 
 - Causa: bucket inexistente o politicas de acceso no configuradas.
 
+1. Clasificación automática no disponible:
+
+- Comprueba `http://127.0.0.1:8000/health`.
+- Inicia el servicio desde la raíz del repositorio con
+  `python -m uvicorn ml_api.main:app --host 127.0.0.1 --port 8000`.
+- Consulta [API_CLASIFICACION_RIESGO_IA.md](./API_CLASIFICACION_RIESGO_IA.md) para
+  revisar entorno, pesos y configuración.
+
 1. Auditoria vacia en UI:
 
 - Causa: trigger no creado o tabla `audit_logs` inexistente.
@@ -169,10 +195,12 @@ Resultado esperado:
 2. Login como invitado y acceso a dashboard empleado.
 3. Login como Encargado SST y acceso a dashboard admin.
 4. Creacion de incidente desde empleado.
-5. Cambio de estado desde admin.
-6. Registro de medida correctiva.
-7. Visualizacion de auditoria.
-8. Exportacion PDF y Excel.
+5. Verificar clasificación automática y el caso de envío `Sin clasificar`.
+6. Cambiar tipo de peligro y gravedad desde admin y verificar recálculo.
+7. Cambio de estado desde admin.
+8. Registro de medida correctiva.
+9. Visualizacion de auditoria.
+10. Exportacion PDF y Excel.
 
 ## Archivos relacionados
 

@@ -15,13 +15,15 @@ Este directorio contiene toda la documentación del proyecto. Aquí está la gu�
 
 ### Funcionalidad y Flujos
 - **[FLUJO_REPORTE_Y_GESTION_SST.md](FLUJO_REPORTE_Y_GESTION_SST.md)** - Flujo operativo: reportar incidentes, revisiones, exportar PDF/Excel
-- **[API_ENDPOINTS.md](API_ENDPOINTS.md)** - Listado de endpoints y funciones disponibles en Supabase
+- **[API_ENDPOINTS.md](API_ENDPOINTS.md)** - Endpoints HTTP implementados y operaciones realizadas directamente con Supabase
+- **[API_CLASIFICACION_RIESGO_IA.md](API_CLASIFICACION_RIESGO_IA.md)** - Pasos de implementación, configuración local y diagnóstico de la API de clasificación BETO
 - **[LOGIN_SIMULADO_Y_PROTECCION_RUTAS.md](LOGIN_SIMULADO_Y_PROTECCION_RUTAS.md)** - Cómo funciona la autenticación simulada y protección de rutas
 
 ### Infraestructura y Base de Datos
 - **[INFORME_PRUEBAS.md](INFORME_PRUEBAS.md)** - Resultados y cobertura de pruebas automatizadas
 - **[SUPABASE_BASELINE.sql](SUPABASE_BASELINE.sql)** - Script de inicialización de base de datos
 - **[SEED_25_INCIDENTES.sql](SEED_25_INCIDENTES.sql)** - Datos de prueba (25 incidentes para testing)
+- **[Migraciones de incidentes](../db/migrations)** - Esquema, historial de usuario y clasificación pendiente
 
 ---
 
@@ -36,11 +38,15 @@ Este directorio contiene toda la documentación del proyecto. Aquí está la gu�
 ### Quiero... saber cómo funciona el reporte y exportación
 → Lee: **[FLUJO_REPORTE_Y_GESTION_SST.md](FLUJO_REPORTE_Y_GESTION_SST.md)**
 
+### Quiero... iniciar o diagnosticar la clasificación de riesgo con IA
+→ Lee: **[API_CLASIFICACION_RIESGO_IA.md](API_CLASIFICACION_RIESGO_IA.md)**
+
 ### Quiero... entender cómo se implementó Capacitor y el webview
 → Lee: **[CAPACITOR_IMPLEMENTACION.md](CAPACITOR_IMPLEMENTACION.md)** (todo el documento)
 
 ### Quiero... configurar la base de datos desde cero
-→ Corre: `SUPABASE_BASELINE.sql` y `SEED_25_INCIDENTES.sql`
+→ Ejecuta `SUPABASE_BASELINE.sql`, las migraciones 001–003 y el seed de
+incidentes; el seed de 25 registros es opcional para pruebas de interfaz.
 
 ---
 
@@ -49,7 +55,8 @@ Este directorio contiene toda la documentación del proyecto. Aquí está la gu�
 | Capa | Tecnología | Docs |
 |------|-----------|------|
 | **Web** | Next.js 16.2.4 (Turbopack) + React 19 + Tailwind v4 | [ORGANIZACION_PROYECTO.md](ORGANIZACION_PROYECTO.md) |
-| **API** | Supabase (PostgreSQL) | [API_ENDPOINTS.md](API_ENDPOINTS.md) |
+| **API** | Next.js Route Handlers + Supabase (PostgreSQL) | [API_ENDPOINTS.md](API_ENDPOINTS.md) |
+| **Clasificación IA** | FastAPI + BETO local | [API_CLASIFICACION_RIESGO_IA.md](API_CLASIFICACION_RIESGO_IA.md) |
 | **Móvil** | Capacitor 8.x + Android Gradle | [CAPACITOR_IMPLEMENTACION.md](CAPACITOR_IMPLEMENTACION.md) |
 | **Despliegue Web** | Vercel | - |
 | **Despliegue APK** | Ionic Appflow o Gradle local | [APPFLOW_APK_SETUP.md](APPFLOW_APK_SETUP.md) |
@@ -97,4 +104,4 @@ Este directorio contiene toda la documentación del proyecto. Aquí está la gu�
 
 ---
 
-**Última actualización**: 11 de mayo de 2026
+**Última actualización**: 25 de noviembre de 2026

@@ -4,16 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReportarIncidente from "@/components/ReportarIncidente";
 import ConsultaIncidente from "@/components/ConsultaIncidente";
 
-const { crearIncidenteMock, consultarIncidenteMock, listarMisIncidentesMock } = vi.hoisted(() => ({
+const { crearIncidenteMock, consultarIncidenteMock, listarMisIncidentesMock, sugerirTipoRiesgoMock } = vi.hoisted(() => ({
   crearIncidenteMock: vi.fn(),
   consultarIncidenteMock: vi.fn(),
   listarMisIncidentesMock: vi.fn(),
+  sugerirTipoRiesgoMock: vi.fn(),
 }));
 
 vi.mock("@/utils/incidentesApi", () => ({
   crearIncidente: crearIncidenteMock,
   consultarIncidente: consultarIncidenteMock,
   listarMisIncidentes: listarMisIncidentesMock,
+  sugerirTipoRiesgo: sugerirTipoRiesgoMock,
 }));
 
 vi.mock("@/utils/evidencias", () => ({ subirEvidencia: vi.fn() }));
@@ -63,8 +65,29 @@ const actualizarSeleccion = async (elemento: HTMLSelectElement, valor: string) =
 };
 
 const completarClasificacion = async () => {
-  await actualizarSeleccion(contenedor.querySelector<HTMLSelectElement>("#tipoPeligro")!, "Quimico");
+  sugerirTipoRiesgoMock.mockResolvedValue({
+    ok: true,
+    data: { tipo_peligro: "Quimico" },
+  });
+  vi.useFakeTimers();
+  await actualizarValor(
+    contenedor.querySelector<HTMLTextAreaElement>("#descripcion")!,
+    "Sustancia química derramada en el piso del área de trabajo."
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  vi.useRealTimers();
   await actualizarSeleccion(contenedor.querySelector<HTMLSelectElement>("#gravedad")!, "Alta");
+};
+
+const actualizarTituloYEsperarClasificacion = async (valor: string) => {
+  vi.useFakeTimers();
+  await actualizarValor(contenedor.querySelector<HTMLInputElement>("#titulo")!, valor);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  vi.useRealTimers();
 };
 
 const enviarFormulario = async (formulario: HTMLFormElement) => {
@@ -94,16 +117,115 @@ afterEach(async () => {
 });
 
 describe("resultados visibles en el flujo de reporte", () => {
-  it("exige elegir tipo de peligro y gravedad antes de enviar", async () => {
+  it("aplica automáticamente la sugerencia después de una pausa y mantiene el tipo bloqueado", async () => {
+    vi.useFakeTimers();
+    sugerirTipoRiesgoMock.mockResolvedValue({
+      ok: true,
+      data: { tipo_peligro: "Seguridad" },
+    });
+
+    try {
+      await act(async () => root.render(<ReportarIncidente />));
+      const descripcion = contenedor.querySelector<HTMLTextAreaElement>("#descripcion")!;
+      await actualizarValor(descripcion, "El trabajador se resbaló en una escalera.");
+      await actualizarValor(descripcion, "El trabajador se resbaló en una escalera mojada.");
+
+      expect(sugerirTipoRiesgoMock).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+
+      expect(sugerirTipoRiesgoMock).toHaveBeenCalledOnce();
+      expect(sugerirTipoRiesgoMock).toHaveBeenCalledWith(
+        "El trabajador se resbaló en una escalera mojada.",
+        expect.any(AbortSignal)
+      );
+      const tipoPeligro = contenedor.querySelector<HTMLInputElement>("#tipoPeligro")!;
+      expect(tipoPeligro.value).toBe("Condiciones de Seguridad");
+      expect(tipoPeligro.readOnly).toBe(true);
+      expect(contenedor.textContent).toContain("Clasificación automática lista: Condiciones de Seguridad");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clasifica un reporte corto al editar título y descripción", async () => {
+    vi.useFakeTimers();
+    sugerirTipoRiesgoMock.mockResolvedValue({
+      ok: true,
+      data: { tipo_peligro: "Seguridad" },
+    });
+
+    try {
+      await act(async () => root.render(<ReportarIncidente />));
+      await actualizarValor(contenedor.querySelector<HTMLInputElement>("#titulo")!, "piso mojado");
+      await actualizarValor(contenedor.querySelector<HTMLTextAreaElement>("#descripcion")!, "piso mojado");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+
+      expect(sugerirTipoRiesgoMock).toHaveBeenCalledWith(
+        "piso mojado\npiso mojado",
+        expect.any(AbortSignal)
+      );
+      expect(contenedor.querySelector<HTMLInputElement>("#tipoPeligro")?.value).toBe(
+        "Condiciones de Seguridad"
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("permite el tipo pendiente, pero exige gravedad antes de enviar", async () => {
     await act(async () => root.render(<ReportarIncidente />));
 
-    expect(contenedor.querySelector<HTMLSelectElement>("#tipoPeligro")?.value).toBe("");
+    expect(contenedor.querySelector<HTMLInputElement>("#tipoPeligro")?.value).toBe("Sin clasificar");
     expect(contenedor.querySelector<HTMLSelectElement>("#gravedad")?.value).toBe("");
     await enviarFormulario(contenedor.querySelector("form")!);
 
     expect(crearIncidenteMock).not.toHaveBeenCalled();
-    expect(contenedor.textContent).toContain("Selecciona un tipo de peligro.");
     expect(contenedor.textContent).toContain("Selecciona la gravedad.");
+  });
+
+  it("envía Sin clasificar y avisa cuando falla la IA", async () => {
+    vi.useFakeTimers();
+    sugerirTipoRiesgoMock.mockResolvedValue({
+      ok: false,
+      tipo: "negocio",
+      status: 503,
+      mensaje: "No disponible",
+    });
+    crearIncidenteMock.mockResolvedValue({
+      ok: true,
+      data: {
+        ...incidente,
+        tipo_peligro: "Sin clasificar",
+        prioridad_asignada: null,
+        requiere_atencion_inmediata: null,
+      },
+    });
+
+    try {
+      await act(async () => root.render(<ReportarIncidente />));
+      await actualizarValor(
+        contenedor.querySelector<HTMLTextAreaElement>("#descripcion")!,
+        "No se pudo identificar la categoría del riesgo."
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+      vi.useRealTimers();
+      await actualizarSeleccion(contenedor.querySelector<HTMLSelectElement>("#gravedad")!, "Media");
+      await enviarFormulario(contenedor.querySelector("form")!);
+
+      expect(crearIncidenteMock).toHaveBeenCalledWith(
+        expect.objectContaining({ tipo_peligro: "Sin clasificar", gravedad: "Media" })
+      );
+      expect(contenedor.textContent).toContain("El reporte quedó sin tipo de peligro");
+      expect(contenedor.textContent).toContain("pendiente de clasificación");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("muestra la clasificación confirmada, conserva el ID y permite ir a consultarlo", async () => {
@@ -173,7 +295,7 @@ describe("resultados visibles en el flujo de reporte", () => {
     await act(async () => root.render(<ReportarIncidente />));
     await completarClasificacion();
     const titulo = contenedor.querySelector<HTMLInputElement>("#titulo")!;
-    await actualizarValor(titulo, "Reporte pendiente");
+    await actualizarTituloYEsperarClasificacion("Reporte pendiente");
     await enviarFormulario(contenedor.querySelector("form")!);
 
     expect(contenedor.querySelector('[role="alert"]')?.textContent).toContain("Revisa los datos.");
@@ -190,7 +312,7 @@ describe("resultados visibles en el flujo de reporte", () => {
     await act(async () => root.render(<ReportarIncidente />));
     await completarClasificacion();
     const titulo = contenedor.querySelector<HTMLInputElement>("#titulo")!;
-    await actualizarValor(titulo, "Reporte sin conexión");
+    await actualizarTituloYEsperarClasificacion("Reporte sin conexión");
     await enviarFormulario(contenedor.querySelector("form")!);
 
     expect(contenedor.querySelector('[role="alert"]')?.textContent).toContain("No se pudo confirmar el envío.");

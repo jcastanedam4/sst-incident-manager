@@ -22,6 +22,13 @@ export class ErrorNoAutorizado extends Error {
   }
 }
 
+export class ErrorSinPermiso extends Error {
+  constructor(mensaje = "Se requieren permisos de administrador.") {
+    super(mensaje);
+    this.name = "ErrorSinPermiso";
+  }
+}
+
 export class ErrorNoEncontrado extends Error {
   constructor(mensaje = "El incidente solicitado no existe.") {
     super(mensaje);

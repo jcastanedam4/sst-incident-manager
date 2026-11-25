@@ -58,23 +58,28 @@ npm run dev
 
 ## Corte vertical SST (RF-01 y RF-02)
 
-Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `IncidentRepository` -> Supabase.
+Recorrido: Interfaz -> `POST/GET/PATCH /api/v1/incidentes` -> `IncidentService` -> `IncidentRepository` -> Supabase.
 
 - RF-01 (prioridad 1): registrar y clasificar un incidente (tipo de peligro GTC 45 + gravedad). La prioridad y la atencion inmediata se calculan SOLO en `lib/incidentes/evaluadorRiesgo.ts`.
 - RF-02 (prioridad 2): consultar un incidente clasificado por su identificador.
+- La clasificación de tipo de peligro se sugiere automáticamente con BETO
+  ejecutado como servicio FastAPI local; el empleado no edita el valor y admin
+  puede corregirlo. La guía está en
+  [docs/API_CLASIFICACION_RIESGO_IA.md](docs/API_CLASIFICACION_RIESGO_IA.md).
 - La interfaz diferencia errores de validación, negocio y comunicación, conserva
   los datos rechazados y evita envíos o consultas simultáneas.
-- Fuera del alcance de RF-01/RF-02: notificaciones SMS/correo, reevaluacion por medico ocupacional, Machine Learning y gestion de brigadistas.
+- Fuera del alcance de RF-01/RF-02: notificaciones SMS/correo, reevaluacion por medico ocupacional y gestion de brigadistas.
 
 ### Estructura
 - `lib/incidentes/`: validacion, matriz de riesgo, servicio, contrato y repositorio Supabase.
 - `app/api/v1/incidentes/`: endpoints.
+- `ml_api/`: servicio privado FastAPI de inferencia BETO; los pesos se guardan localmente y no se suben a Git.
 - `components/ReportarIncidente.tsx`, `ConsultaIncidente.tsx`: interfaz (sin SQL ni reglas).
 - `db/migrations/`, `db/seed/`: esquema y datos reproducibles.
 
 ### Reproducir la verificacion (sin credenciales reales)
 1. `cp .env.example .env.local` y completar con un proyecto Supabase de PRUEBA. Node 20+.
-2. En el SQL Editor ejecutar en orden: `docs/SUPABASE_BASELINE.sql`, `db/migrations/001_corte_vertical_incidentes.sql`, `db/migrations/002_historial_incidentes_usuario.sql`, `db/seed/002_seed_corte_vertical.sql`.
+2. En el SQL Editor ejecutar en orden: `docs/SUPABASE_BASELINE.sql`, `db/migrations/001_corte_vertical_incidentes.sql`, `db/migrations/002_historial_incidentes_usuario.sql`, `db/migrations/003_clasificacion_pendiente.sql` y `db/seed/002_seed_corte_vertical.sql`.
 3. `npm install` y `npm test` (pruebas unitarias, API, interfaz y arquitectura; no requieren base).
 4. Para ejecutar la integración real, exporta las variables de `.env.local` al proceso PowerShell y corre los tests. Vitest omite esta suite de forma intencional si no se exportan:
 
@@ -104,6 +109,29 @@ Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `In
    El script realiza 20 consultas, verifica HTTP 200 y el ID solicitado, y reporta máximo, mediana y promedio.
    Solo informa cumplimiento si el máximo no supera 1000 ms; la salida no incluye el token.
    Para adjuntar evidencia, registra fecha y ambiente junto a la salida, nunca el JWT.
+
+### Ejecutar el clasificador local
+
+La app requiere que el servicio local esté activo para obtener predicciones.
+Desde la raíz del repositorio, prepara el entorno una sola vez:
+
+```powershell
+py -m venv .venv-ml
+.\.venv-ml\Scripts\Activate.ps1
+python -m pip install -r ml_api\requirements.txt
+```
+
+Coloca los artefactos del modelo y tokenizer en `ml_api/models/` como explica
+[la guía de clasificación IA](docs/API_CLASIFICACION_RIESGO_IA.md). En una
+terminal mantén el servicio ejecutándose:
+
+```powershell
+python -m uvicorn ml_api.main:app --host 127.0.0.1 --port 8000
+```
+
+Verifica `http://127.0.0.1:8000/health` y en otra terminal ejecuta `npm run dev`.
+Si el servicio está apagado, la interfaz permite registrar el incidente como
+`Sin clasificar` para que admin lo revise.
 
 La integración real se verificó previamente con cinco pruebas de repositorio:
 creación y consulta, ausencia de registro, lectura del seed y restricciones de
@@ -204,10 +232,10 @@ docs/
 - user_id (FK opcional a `auth.users`)
 - titulo
 - descripcion
-- tipo_peligro
+- tipo_peligro: categoría GTC 45 o `Sin clasificar`
 - gravedad: Baja | Media | Alta
-- prioridad_asignada: Baja | Media | Alta
-- requiere_atencion_inmediata
+- prioridad_asignada: Baja | Media | Alta | null si queda pendiente de clasificación
+- requiere_atencion_inmediata: boolean | null si queda pendiente de clasificación
 - estado
 - ubicacion
 - fecha_suceso (obligatoria)
@@ -218,9 +246,13 @@ El esquema reproducible se aplica en este orden:
 1. `docs/SUPABASE_BASELINE.sql`
 2. `db/migrations/001_corte_vertical_incidentes.sql`
 3. `db/migrations/002_historial_incidentes_usuario.sql`
-4. `db/seed/002_seed_corte_vertical.sql`
+4. `db/migrations/003_clasificacion_pendiente.sql`
+5. `db/seed/002_seed_corte_vertical.sql`
 
-La migracion agrega restricciones para los catalogos y mantiene la prioridad calculada junto con el incidente. El seed crea cinco registros con identificadores conocidos; para reiniciarlos se usa `db/seed/999_reset_corte_vertical.sql`.
+Las migraciones agregan restricciones para los catalogos, mantienen la prioridad
+calculada junto con el incidente y permiten dejar temporalmente pendiente un
+reporte sin tipo sugerido. El seed crea cinco registros con identificadores
+conocidos; para reiniciarlos se usa `db/seed/999_reset_corte_vertical.sql`.
 
 ### Tabla medidas_correctivas
 

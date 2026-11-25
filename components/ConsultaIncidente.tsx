@@ -1,13 +1,20 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useRef, useState, useSyncExternalStore } from "react";
 import { consultarIncidente, type IncidenteClasificadoApi } from "@/utils/incidentesApi";
+import { obtenerUltimoIncidenteId } from "@/utils/ultimoIncidente";
 import ClasificacionIncidente from "./ClasificacionIncidente";
 
 type Props = { idSugerido?: string };
 
 export default function ConsultaIncidente({ idSugerido }: Props) {
-  const [id, setId] = useState(idSugerido ?? "");
+  const ultimoIdGuardado = useSyncExternalStore(
+    () => () => {},
+    obtenerUltimoIncidenteId,
+    () => null
+  );
+  const [id, setId] = useState<string | undefined>(idSugerido);
+  const idVisible = id ?? ultimoIdGuardado ?? "";
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [incidente, setIncidente] = useState<IncidenteClasificadoApi | null>(null);
@@ -23,7 +30,7 @@ export default function ConsultaIncidente({ idSugerido }: Props) {
     setIncidente(null);
 
     try {
-      const respuesta = await consultarIncidente(id);
+      const respuesta = await consultarIncidente(idVisible);
       if (respuesta.ok) {
         setIncidente(respuesta.data);
       } else if (respuesta.tipo === "validacion") {
@@ -47,7 +54,7 @@ export default function ConsultaIncidente({ idSugerido }: Props) {
       <form onSubmit={consultar} className="mt-4 flex flex-col gap-2 sm:flex-row" noValidate>
         <input
           aria-label="Identificador del incidente"
-          value={id}
+          value={idVisible}
           onChange={(e) => setId(e.target.value)}
           placeholder="UUID del incidente"
           style={{ color: "#111827", WebkitTextFillColor: "#111827", caretColor: "#111827" }}

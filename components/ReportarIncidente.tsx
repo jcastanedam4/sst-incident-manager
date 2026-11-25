@@ -6,6 +6,7 @@ import { GRAVEDADES, TIPOS_GTC45 } from "@/types/incidentes";
 import { esAplicacionNativa } from "@/utils/capacitor";
 import { subirEvidencia } from "@/utils/evidencias";
 import { crearIncidente, type IncidenteClasificadoApi } from "@/utils/incidentesApi";
+import { guardarUltimoIncidenteId } from "@/utils/ultimoIncidente";
 import ClasificacionIncidente from "./ClasificacionIncidente";
 
 type Props = {
@@ -109,15 +110,28 @@ export default function ReportarIncidente({ onIncidenteCreado }: Props) {
 
       const incidente = respuesta.data;
       setResultado(incidente);
+      const advertencias: string[] = [];
+
+      try {
+        guardarUltimoIncidenteId(incidente.id);
+      } catch {
+        advertencias.push("No se pudo conservar el ID para consultarlo después de recargar la página.");
+      }
 
       if (archivoAdjunto) {
-        const evidencia = await subirEvidencia(incidente.id, archivoAdjunto);
-        if (!evidencia.ok) {
-          setAviso({
-            tipo: "advertencia",
-            texto: `El incidente quedó registrado, pero la evidencia no pudo guardarse: ${evidencia.mensaje}`,
-          });
+        try {
+          const evidencia = await subirEvidencia(incidente.id, archivoAdjunto);
+          if (!evidencia.ok) {
+            advertencias.push(`El incidente quedó registrado, pero la evidencia no pudo guardarse: ${evidencia.mensaje}`);
+          }
+        } catch (error) {
+          const detalle = error instanceof Error ? error.message : "Error inesperado.";
+          advertencias.push(`El incidente quedó registrado, pero la evidencia no pudo guardarse: ${detalle}`);
         }
+      }
+
+      if (advertencias.length > 0) {
+        setAviso({ tipo: "advertencia", texto: advertencias.join(" ") });
       }
 
       setTitulo("");
@@ -213,7 +227,7 @@ export default function ReportarIncidente({ onIncidenteCreado }: Props) {
       )}
 
       {resultado && (
-        <div className="mt-4">
+        <div role="status" className="mt-4">
           <p className="text-sm font-semibold text-emerald-700">Incidente registrado y clasificado por el sistema.</p>
           <ClasificacionIncidente incidente={resultado} />
         </div>

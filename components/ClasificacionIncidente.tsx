@@ -9,7 +9,7 @@ const COLOR_PRIORIDAD: Record<string, string> = {
 /** Solo muestra lo que calculó el backend; no contiene ninguna regla de priorización. */
 export default function ClasificacionIncidente({ incidente }: { incidente: IncidenteClasificadoApi }) {
   return (
-    <dl className="mt-4 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800">
+    <dl aria-label="Clasificación del incidente" role="status" className="mt-4 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800">
       <div>
         <dt className="font-semibold">Identificador</dt>
         <dd className="break-all font-mono text-xs">{incidente.id}</dd>

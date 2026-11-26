@@ -38,6 +38,10 @@ describe("cliente API de incidentes", () => {
     await expect(
       crearIncidente({ titulo: "Derrame", descripcion: "Sustancia en el piso", tipo_peligro: "Quimico", gravedad: "Alta" })
     ).resolves.toEqual({ ok: true, data: incidente });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/incidentes/",
+      expect.objectContaining({ method: "POST" })
+    );
     expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ Authorization: "Bearer test-token" });
   });
 
@@ -89,7 +93,7 @@ describe("cliente API de incidentes", () => {
 
     await expect(listarMisIncidentes()).resolves.toEqual({ ok: true, data: [incidente] });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/incidentes/mis-reportes",
+      "/api/v1/incidentes/mis-reportes/",
       expect.objectContaining({ method: "GET", headers: { "Content-Type": "application/json", Authorization: "Bearer test-token" } })
     );
   });

@@ -96,7 +96,7 @@ const llamarApi = async <T>(ruta: string, opciones: RequestInit, mensajeRed: str
 /** RF-01. Un fallo de red es incierto: el incidente pudo haberse creado; no se reintenta automáticamente. */
 export const crearIncidente = (datos: NuevoIncidenteApi) =>
   llamarApi<IncidenteClasificadoApi>(
-    "/api/v1/incidentes",
+    "/api/v1/incidentes/",
     { method: "POST", body: JSON.stringify(datos) },
     "No se pudo confirmar el envío por un problema de conexión. Antes de reintentar, verifica si el reporte ya fue registrado."
   );
@@ -104,7 +104,7 @@ export const crearIncidente = (datos: NuevoIncidenteApi) =>
 /** RF-02. Solo lectura. */
 export const consultarIncidente = (id: string) =>
   llamarApi<IncidenteClasificadoApi>(
-    `/api/v1/incidentes/${encodeURIComponent(id.trim())}`,
+    `/api/v1/incidentes/${encodeURIComponent(id.trim())}/`,
     { method: "GET" },
     "No se pudo consultar el incidente por un problema de conexión. Intenta de nuevo."
   );
@@ -112,7 +112,7 @@ export const consultarIncidente = (id: string) =>
 /** Historial reciente del usuario autenticado; el servidor determina el propietario. */
 export const listarMisIncidentes = () =>
   llamarApi<IncidenteClasificadoApi[]>(
-    "/api/v1/incidentes/mis-reportes",
+    "/api/v1/incidentes/mis-reportes/",
     { method: "GET" },
     "No se pudieron cargar tus últimos reportes. Intenta de nuevo."
   );

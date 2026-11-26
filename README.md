@@ -1,9 +1,3 @@
-<div align="center">
-  
-[🌐 Demo en vivo](https://sst-incident-manager.vercel.app/)
-</div>
-
-
 # SST Incident Manager
 
 Prototipo para gestionar reportes SST con dos roles y autenticacion real con Supabase Auth:
@@ -41,6 +35,9 @@ NEXT_PUBLIC_SUPABASE_URL=tu_url_de_supabase
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_llave_anonima
 ```
 
+Para ejecutar las pruebas de persistencia real, configura localmente (sin subir
+el archivo) `TEST_SUPABASE_URL` y `TEST_SUPABASE_SERVICE_ROLE_KEY`.
+
 1. Inicia el servidor de desarrollo:
 
 ```bash
@@ -55,6 +52,64 @@ npm run dev
 - npm run build: build de producción
 - npm run start: ejecutar build
 - npm run lint: validación con ESLint
+- npm test: pruebas unitarias, de API y arquitectura
+- npm run medir:consulta: medición de consultas de RF-02 con un JWT
+- npx vitest run tests/integration/incidentRepository.integration.test.ts: pruebas reales de persistencia
+
+## Corte vertical SST (RF-01 y RF-02)
+
+Recorrido: Interfaz -> `POST/GET /api/v1/incidentes` -> `IncidentService` -> `IncidentRepository` -> Supabase.
+
+- RF-01 (prioridad 1): registrar y clasificar un incidente (tipo de peligro GTC 45 + gravedad). La prioridad y la atencion inmediata se calculan SOLO en `lib/incidentes/evaluadorRiesgo.ts`.
+- RF-02 (prioridad 2): consultar un incidente clasificado por su identificador.
+- La interfaz diferencia errores de validación, negocio y comunicación, conserva
+  los datos rechazados y evita envíos o consultas simultáneas.
+- Fuera del alcance de RF-01/RF-02: notificaciones SMS/correo, reevaluacion por medico ocupacional, Machine Learning y gestion de brigadistas.
+
+### Estructura
+- `lib/incidentes/`: validacion, matriz de riesgo, servicio, contrato y repositorio Supabase.
+- `app/api/v1/incidentes/`: endpoints.
+- `components/ReportarIncidente.tsx`, `ConsultaIncidente.tsx`: interfaz (sin SQL ni reglas).
+- `db/migrations/`, `db/seed/`: esquema y datos reproducibles.
+
+### Reproducir la verificacion (sin credenciales reales)
+1. `cp .env.example .env.local` y completar con un proyecto Supabase de PRUEBA. Node 20+.
+2. En el SQL Editor ejecutar en orden: `docs/SUPABASE_BASELINE.sql`, `db/migrations/001_corte_vertical_incidentes.sql`, `db/migrations/002_historial_incidentes_usuario.sql`, `db/seed/002_seed_corte_vertical.sql`.
+3. `npm install` y `npm test` (pruebas unitarias, API, interfaz y arquitectura; no requieren base).
+4. Para ejecutar la integración real, exporta las variables de `.env.local` al proceso PowerShell y corre los tests. Vitest omite esta suite de forma intencional si no se exportan:
+
+   ```powershell
+   Get-Content .env.local | ForEach-Object {
+     if ($_ -match '^\s*(TEST_SUPABASE_URL|TEST_SUPABASE_SERVICE_ROLE_KEY)\s*=\s*(.*)\s*$') {
+       $name = $Matches[1]
+       $value = $Matches[2].Trim().Trim('"').Trim("'")
+       Set-Item -Path ("Env:" + $name) -Value $value
+     }
+   }
+   npx vitest run tests/integration/incidentRepository.integration.test.ts
+   Remove-Item Env:\TEST_SUPABASE_URL, Env:\TEST_SUPABASE_SERVICE_ROLE_KEY
+   ```
+
+   No imprimas ni compartas la clave `service_role`.
+5. Estado inicial conocido: 5 incidentes con ids `00000000-0000-4000-8000-00000000000{1..5}`. Para reiniciar: `db/seed/999_reset_corte_vertical.sql` y luego el seed.
+6. Rendimiento de RF-02 con `npm run dev` activo. En PowerShell, configura un JWT de sesión y un ID existente solo en variables temporales:
+
+   ```powershell
+   $env:ACCESS_TOKEN = "<JWT de sesión>"
+   $env:INCIDENT_ID = "<UUID existente>"
+   npm run medir:consulta | Tee-Object -FilePath docs\medicion-consulta.txt
+   Remove-Item Env:\ACCESS_TOKEN, Env:\INCIDENT_ID
+   ```
+
+   El script realiza 20 consultas, verifica HTTP 200 y el ID solicitado, y reporta máximo, mediana y promedio.
+   Solo informa cumplimiento si el máximo no supera 1000 ms; la salida no incluye el token.
+   Para adjuntar evidencia, registra fecha y ambiente junto a la salida, nunca el JWT.
+
+La integración real se verificó previamente con cinco pruebas de repositorio:
+creación y consulta, ausencia de registro, lectura del seed y restricciones de
+integridad. Sin `TEST_SUPABASE_SERVICE_ROLE_KEY`, Vitest omite esas cinco pruebas.
+
+Contratos de API implementados: ver `docs/API_ENDPOINTS.md`.
 
 ## Flujo funcional implementado
 
@@ -70,15 +125,26 @@ npm run dev
 ## 2) Vista Empleado (ruta /dashboard/empleado)
 
 - Interfaz limpia para reportar incidentes.
-- Campos: Titulo, Descripcion, Tipo de Peligro (GTC 45), y evidencia multimedia.
-- Al enviar se hace INSERT en incidentes con estado Abierto y user_email del usuario autenticado.
+- Campos: Titulo, Descripcion, Tipo de Peligro (GTC 45), Gravedad y evidencia multimedia.
+- El formulario consume `POST /api/v1/incidentes`; no escribe directamente en Supabase.
+- El backend valida los datos, calcula la prioridad y la atencion inmediata, y devuelve la clasificacion persistida.
+- La consulta muestra los cinco reportes más recientes del empleado autenticado; se puede seleccionar uno para ver su clasificación sin ingresar el UUID.
+- La pantalla conserva el último ID confirmado en el almacenamiento de sesión; después de recargar,
+  permite consultar de nuevo ese mismo incidente mediante `GET /api/v1/incidentes/{id}`.
+- Los errores de validación, autorización, ausencia y comunicación se muestran en pantalla sin
+  limpiar los datos rechazados ni reintentar automáticamente un envío incierto.
 
 ## 3) Vista Administrador (ruta /dashboard/admin)
 
 - Interfaz diferenciada con barra lateral azul.
+- Indicadores con totales por estado, distribucion de prioridad (incluye incidentes sin clasificar) y conteo de atencion inmediata.
+- La distribucion por tipo de peligro muestra cantidad y porcentaje sobre el total.
 - Lista de incidentes por estado (Abierto, En Proceso, Cerrado).
+- Cada reporte muestra gravedad, prioridad asignada por el sistema y si requiere atención inmediata.
+- La lista se ordena por prioridad (Alta, Media, Baja y Sin clasificar), con atencion inmediata primero dentro de cada nivel, y se puede filtrar por estado y prioridad.
+- Al cambiar de pagina, la vista se desplaza suavemente al inicio de la lista.
 - Al seleccionar un incidente:
-- Permite asignar prioridad (Alta, Media, Baja).
+- Muestra la prioridad calculada por el sistema; la prioridad de la medida correctiva se selecciona aparte.
 - Permite escribir medida correctiva.
 - Al guardar:
 - INSERT en medidas_correctivas.
@@ -89,6 +155,23 @@ npm run dev
 - Navbar compartida en ambos dashboards.
 - Muestra rol actual y correo simulado.
 - Boton Cerrar sesion: ejecuta supabase.auth.signOut() y regresa al login.
+
+## Verificación del corte vertical
+
+La suite automatizada cubre reglas de riesgo, validaciones, servicio, API,
+arquitectura, resultados visibles del flujo de reporte/consulta, filtros de
+prioridad, indicadores del panel administrador, interfaz de exportación y
+persistencia real. La última ejecución de `npm test` fue:
+
+- 95 pruebas aprobadas y 5 pruebas de integración Supabase omitidas porque
+  requieren variables de entorno de integración.
+- En una ejecución anterior con credenciales configuradas, las 5 pruebas de
+  integración Supabase aprobaron.
+- `npm run build` aprobado con la configuración de Supabase.
+- El lint de los archivos del corte vertical pasa; el lint global aún reporta
+  incidencias heredadas fuera de este flujo.
+- La medición real de latencia debe adjuntarse desde un entorno autenticado;
+  no se debe registrar ni compartir el JWT.
 
 ## Estructura principal
 
@@ -118,16 +201,26 @@ docs/
 ### Tabla incidentes
 
 - id (PK)
-- user_id (nullable)
+- user_id (FK opcional a `auth.users`)
 - titulo
 - descripcion
 - tipo_peligro
+- gravedad: Baja | Media | Alta
+- prioridad_asignada: Baja | Media | Alta
+- requiere_atencion_inmediata
 - estado
 - ubicacion
 - fecha_suceso (obligatoria)
-- created_at (recomendado)
+- created_at (fecha de registro)
 
-Nota: en este prototipo no hay datos semilla de incidentes cargados en el repositorio. Los registros aparecen cuando el trabajador envia un reporte desde la interfaz y se guardan en Supabase.
+El esquema reproducible se aplica en este orden:
+
+1. `docs/SUPABASE_BASELINE.sql`
+2. `db/migrations/001_corte_vertical_incidentes.sql`
+3. `db/migrations/002_historial_incidentes_usuario.sql`
+4. `db/seed/002_seed_corte_vertical.sql`
+
+La migracion agrega restricciones para los catalogos y mantiene la prioridad calculada junto con el incidente. El seed crea cinco registros con identificadores conocidos; para reiniciarlos se usa `db/seed/999_reset_corte_vertical.sql`.
 
 ### Tabla medidas_correctivas
 
@@ -249,3 +342,26 @@ Notas:
 - Explicación paso a paso de la fase: [docs/COMO_SE_DESARROLLO_FASE4.md](docs/COMO_SE_DESARROLLO_FASE4.md)
 - Guia de login y proteccion de rutas: [docs/LOGIN_SIMULADO_Y_PROTECCION_RUTAS.md](docs/LOGIN_SIMULADO_Y_PROTECCION_RUTAS.md)
 - Flujo funcional completo (reporte, gestion, auditoria, exportacion): [docs/FLUJO_REPORTE_Y_GESTION_SST.md](docs/FLUJO_REPORTE_Y_GESTION_SST.md)
+
+
+## Test
+
+- npm install -> Descarga las librerías 
+
+
+- mkdir evidencias -> Crea una carpeta llamada evidencias para guardar los resultados
+
+
+- npm test | Tee-Object evidencias\npm-test.txt -> Corre todas las pruebas automáticas del proyecto
+
+
+- npx vitest run tests/lib/incidentService.test.ts ->Comprueba que se puede registrar un incidente, que un dato inválido se rechaza sin guardar nada, que se encuentra uno existente y que uno inexistente da error controlado. 
+
+
+- npx vitest run tests/lib/evaluadorRiesgo.test.ts -> Prueba la matriz de prioridad. Cubre las 21 combinaciones de peligro y gravedad.
+
+
+- npx vitest run tests/api -> Prueba los dos endpoints, con el servicio simulado. Comprueba las respuestas: 201 al crear, 400 por datos inválidos, 401 sin sesión, 404 si el incidente no existe y 500 sin mostrar detalles técnicos.
+
+
+- npx vitest run tests/architecture -> Revisa la estructura del código, no su funcionamiento. Verifica que la pantalla no tenga SQL ni repita la regla de prioridad, que los endpoints deleguen al servicio y que solo el repositorio toque la tabla. Es la evidencia de que cada capa hace solo lo suyo.

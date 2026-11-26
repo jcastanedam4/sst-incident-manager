@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { obtenerUsuarioSesion, supabase } from "@/utils/supabase";
@@ -11,15 +11,30 @@ import {
   type AuditLog,
   type EstadoIncidente,
   type Incidente,
+  type Prioridad,
   type UsuarioApp,
 } from "@/types/incidentes";
-import { exportarIncidentesExcel, exportarIndicadoresPdf } from "@/utils/reportes";
+import { filtrarIncidentes, type FiltroPrioridad } from "@/utils/filtrosIncidentes";
+import { calcularIndicadoresIncidentes } from "@/utils/indicadoresIncidentes";
 import ExportButtons from "./ExportButtons";
 
 const COLOR_ESTADO: Record<EstadoIncidente, string> = {
   Abierto: "bg-amber-100 text-amber-900",
   "En Proceso": "bg-blue-100 text-blue-900",
   Cerrado: "bg-emerald-100 text-emerald-900",
+};
+
+const COLOR_PRIORIDAD: Record<Prioridad, string> = {
+  Alta: "border-red-200 bg-red-100 text-red-900",
+  Media: "border-amber-200 bg-amber-100 text-amber-900",
+  Baja: "border-emerald-200 bg-emerald-100 text-emerald-900",
+};
+
+const COLOR_INDICADOR_PRIORIDAD: Record<string, string> = {
+  Alta: "border-red-200 bg-red-50 text-red-900",
+  Media: "border-amber-200 bg-amber-50 text-amber-900",
+  Baja: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  "Sin clasificar": "border-zinc-200 bg-zinc-50 text-zinc-700",
 };
 
 const INCIDENTES_POR_PAGINA = 10;
@@ -33,16 +48,23 @@ export default function DashboardAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [incidenteSeleccionado, setIncidenteSeleccionado] = useState<Incidente | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<"TODOS" | EstadoIncidente>("TODOS");
+  const [filtroPrioridad, setFiltroPrioridad] = useState<FiltroPrioridad>("TODOS");
   const [prioridad, setPrioridad] = useState("Media");
   const [medidaCorrectiva, setMedidaCorrectiva] = useState("");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [paginaIncidentes, setPaginaIncidentes] = useState(1);
+  const listaIncidentesRef = useRef<HTMLElement>(null);
+
+  const cambiarPagina = (pagina: number) => {
+    setPaginaIncidentes(pagina);
+    listaIncidentesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const cargarIncidentes = async () => {
     const { data, error: fetchError } = await supabase
       .from("incidentes")
-      .select("id, user_id, titulo, descripcion, tipo_peligro, estado, created_at, fecha_suceso, ubicacion, evidencias(url_storage, tipo_archivo, created_at)")
+      .select("id, user_id, titulo, descripcion, tipo_peligro, gravedad, prioridad_asignada, requiere_atencion_inmediata, estado, created_at, fecha_suceso, ubicacion, evidencias(url_storage, tipo_archivo, created_at)")
       .order("created_at", { ascending: false });
 
     let incidentesCrudos = data as unknown as Incidente[] | null;
@@ -50,7 +72,7 @@ export default function DashboardAdminPage() {
     if (fetchError) {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from("incidentes")
-        .select("id, user_id, titulo, descripcion, tipo_peligro, estado, created_at, ubicacion")
+        .select("id, user_id, titulo, descripcion, tipo_peligro, gravedad, prioridad_asignada, requiere_atencion_inmediata, estado, created_at, ubicacion")
         .order("created_at", { ascending: false });
 
       if (fallbackError) {
@@ -216,50 +238,20 @@ export default function DashboardAdminPage() {
     setLoading(false);
   };
 
-  const incidentesFiltrados = useMemo(() => {
-    if (filtroEstado === "TODOS") {
-      return incidentes;
-    }
-
-    return incidentes.filter((incidente) => incidente.estado === filtroEstado);
-  }, [filtroEstado, incidentes]);
+  const incidentesFiltrados = useMemo(
+    () => filtrarIncidentes(incidentes, filtroEstado, filtroPrioridad),
+    [filtroEstado, filtroPrioridad, incidentes]
+  );
 
   const totalPaginas = Math.max(1, Math.ceil(incidentesFiltrados.length / INCIDENTES_POR_PAGINA));
+  const paginaVisible = Math.min(paginaIncidentes, totalPaginas);
 
   const incidentesPaginados = useMemo(() => {
-    const indiceInicio = (paginaIncidentes - 1) * INCIDENTES_POR_PAGINA;
+    const indiceInicio = (paginaVisible - 1) * INCIDENTES_POR_PAGINA;
     return incidentesFiltrados.slice(indiceInicio, indiceInicio + INCIDENTES_POR_PAGINA);
-  }, [incidentesFiltrados, paginaIncidentes]);
+  }, [incidentesFiltrados, paginaVisible]);
 
-  useEffect(() => {
-    setPaginaIncidentes(1);
-  }, [filtroEstado]);
-
-  useEffect(() => {
-    if (paginaIncidentes > totalPaginas) {
-      setPaginaIncidentes(totalPaginas);
-    }
-  }, [paginaIncidentes, totalPaginas]);
-
-  const indicadores = useMemo(() => {
-    const total = incidentes.length;
-    const abiertos = incidentes.filter((incidente) => incidente.estado === "Abierto").length;
-    const enProceso = incidentes.filter((incidente) => incidente.estado === "En Proceso").length;
-    const cerrados = incidentes.filter((incidente) => incidente.estado === "Cerrado").length;
-
-    const porTipo = incidentes.reduce<Record<string, number>>((acc, incidente) => {
-      acc[incidente.tipo_peligro] = (acc[incidente.tipo_peligro] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    return {
-      total,
-      abiertos,
-      enProceso,
-      cerrados,
-      porTipo: Object.entries(porTipo).sort((a, b) => b[1] - a[1]),
-    };
-  }, [incidentes]);
+  const indicadores = useMemo(() => calcularIndicadoresIncidentes(incidentes), [incidentes]);
 
   return (
     <div className="min-h-screen bg-zinc-100">
@@ -302,31 +294,94 @@ export default function DashboardAdminPage() {
               </article>
             </div>
 
-            <div className="mt-4 space-y-2">
-              {indicadores.porTipo.map(([tipo, cantidad]) => {
-                const ancho = indicadores.total > 0 ? Math.max(8, Math.round((cantidad / indicadores.total) * 100)) : 0;
-                return (
-                  <div key={tipo}>
-                    <div className="mb-1 flex items-center justify-between text-xs text-zinc-600">
-                      <span>{tipo}</span>
-                      <span>{cantidad}</span>
+            <div className="mt-6 border-t border-zinc-100 pt-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold text-zinc-900">Prioridad asignada por el sistema</h3>
+                  <p className="mt-1 text-xs text-zinc-500">Distribucion de los incidentes segun su nivel de riesgo.</p>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                  <span className="font-semibold">Atencion inmediata</span>
+                  <span className="rounded-full bg-red-700 px-2 py-0.5 text-xs font-bold text-white">
+                    {indicadores.atencionInmediata}
+                  </span>
+                  <span className="text-xs">{indicadores.porcentajeAtencionInmediata}%</span>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {indicadores.porPrioridad.map(({ nombre, cantidad, porcentaje }) => (
+                  <article
+                    key={nombre}
+                    className={`rounded-lg border p-3 ${COLOR_INDICADOR_PRIORIDAD[nombre]}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase">{nombre}</p>
+                      <p className="text-xs font-medium">{porcentaje}%</p>
                     </div>
-                    <div className="h-2 rounded-full bg-zinc-100">
-                      <div className="h-2 rounded-full bg-blue-700" style={{ width: `${ancho}%` }} />
+                    <p className="mt-2 text-2xl font-bold">{cantidad}</p>
+                    <p className="text-xs opacity-75">incidentes</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 border-t border-zinc-100 pt-5">
+              <div className="mb-3">
+                <h3 className="font-semibold text-zinc-900">Incidentes por tipo de peligro</h3>
+                <p className="mt-1 text-xs text-zinc-500">Cantidad y proporcion sobre el total de reportes.</p>
+              </div>
+              {indicadores.porTipo.length === 0 ? (
+                <p className="rounded-lg bg-zinc-50 px-3 py-4 text-sm text-zinc-500">
+                  {loading
+                    ? "Cargando indicadores..."
+                    : error
+                      ? "No se pudieron cargar los indicadores."
+                      : "Aun no hay incidentes registrados."}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {indicadores.porTipo.map(({ tipo, cantidad, porcentaje }) => (
+                    <div key={tipo}>
+                      <div className="mb-1 flex items-center justify-between gap-3 text-xs text-zinc-600">
+                        <span className="font-medium">{tipo}</span>
+                        <span>{cantidad} reportes · {porcentaje}%</span>
+                      </div>
+                      <div
+                        role="progressbar"
+                        aria-label={`Incidentes de tipo ${tipo}`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={porcentaje}
+                        aria-valuetext={`${cantidad} reportes, ${porcentaje}% del total`}
+                        className="h-2 overflow-hidden rounded-full bg-zinc-100"
+                      >
+                        <div
+                          className="h-full rounded-full bg-blue-700 transition-[width]"
+                          style={{ width: `${porcentaje}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
-          <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
+          <section
+            ref={listaIncidentesRef}
+            className="scroll-mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm"
+          >
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-zinc-900">Gestion de incidentes</h2>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <select
+                  aria-label="Filtrar por estado"
                   value={filtroEstado}
-                  onChange={(event) => setFiltroEstado(event.target.value as "TODOS" | EstadoIncidente)}
+                  onChange={(event) => {
+                    setFiltroEstado(event.target.value as "TODOS" | EstadoIncidente);
+                    setPaginaIncidentes(1);
+                  }}
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700"
                 >
                   <option value="TODOS">Todos</option>
@@ -335,6 +390,21 @@ export default function DashboardAdminPage() {
                       {estado}
                     </option>
                   ))}
+                </select>
+                <select
+                  aria-label="Filtrar por prioridad"
+                  value={filtroPrioridad}
+                  onChange={(event) => {
+                    setFiltroPrioridad(event.target.value as FiltroPrioridad);
+                    setPaginaIncidentes(1);
+                  }}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700"
+                >
+                  <option value="TODOS">Todas las prioridades</option>
+                  <option value="Alta">Prioridad Alta</option>
+                  <option value="Media">Prioridad Media</option>
+                  <option value="Baja">Prioridad Baja</option>
+                  <option value="SIN_CLASIFICAR">Sin clasificar</option>
                 </select>
                 <button
                   type="button"
@@ -370,6 +440,25 @@ export default function DashboardAdminPage() {
                     <h3 className="mt-1 text-lg font-semibold text-zinc-900">{incidente.titulo}</h3>
                     <p className="mt-2 text-sm text-zinc-600">{incidente.descripcion}</p>
                     <p className="mt-2 text-xs font-medium text-zinc-500">Tipo de peligro: {incidente.tipo_peligro}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {incidente.prioridad_asignada ? (
+                        <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${COLOR_PRIORIDAD[incidente.prioridad_asignada]}`}>
+                          Prioridad {incidente.prioridad_asignada}
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-zinc-300 bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
+                          Sin clasificar
+                        </span>
+                      )}
+                      {incidente.gravedad && (
+                        <span className="text-xs text-zinc-600">Gravedad {incidente.gravedad}</span>
+                      )}
+                      {incidente.requiere_atencion_inmediata && (
+                        <span className="rounded-full bg-red-700 px-2 py-1 text-xs font-semibold text-white">
+                          Atención inmediata
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -416,19 +505,19 @@ export default function DashboardAdminPage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        disabled={paginaIncidentes === 1}
-                        onClick={() => setPaginaIncidentes((actual) => Math.max(1, actual - 1))}
+                        disabled={paginaVisible === 1}
+                        onClick={() => cambiarPagina(Math.max(1, paginaVisible - 1))}
                         className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Anterior
                       </button>
                       <span className="rounded-lg bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-700">
-                        Pagina {paginaIncidentes} de {totalPaginas}
+                        Pagina {paginaVisible} de {totalPaginas}
                       </span>
                       <button
                         type="button"
-                        disabled={paginaIncidentes === totalPaginas}
-                        onClick={() => setPaginaIncidentes((actual) => Math.min(totalPaginas, actual + 1))}
+                        disabled={paginaVisible === totalPaginas}
+                        onClick={() => cambiarPagina(Math.min(totalPaginas, paginaVisible + 1))}
                         className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Siguiente
@@ -448,11 +537,16 @@ export default function DashboardAdminPage() {
                   #{incidenteSeleccionado.id}
                 </p>
                 <p className="mt-2 text-sm font-semibold text-blue-950">{incidenteSeleccionado.titulo}</p>
+                <p className="mt-1 text-sm text-blue-900">
+                  Prioridad del sistema: {incidenteSeleccionado.prioridad_asignada ?? "Sin clasificar"}
+                  {incidenteSeleccionado.gravedad ? ` · Gravedad ${incidenteSeleccionado.gravedad}` : ""}
+                  {incidenteSeleccionado.requiere_atencion_inmediata ? " · Atención inmediata" : ""}
+                </p>
 
                 <div className="mt-4 space-y-4">
                   <div>
                     <label htmlFor="prioridad" className="mb-1 block text-sm font-medium text-blue-900">
-                      Prioridad
+                      Prioridad de la medida correctiva
                     </label>
                     <select
                       id="prioridad"

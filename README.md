@@ -14,10 +14,12 @@ Objetivo de la fase actual: operar el flujo SST con RLS, bitacora de auditoria y
 - TypeScript
 - Tailwind CSS 4
 - Supabase JavaScript Client
+- Python, FastAPI y PyTorch/Transformers para el servicio local de clasificación BETO
 
 ## Requisitos
 
 - Node.js 20+
+- Python compatible con las dependencias de `ml_api/requirements.txt` para ejecutar el clasificador local
 - Proyecto de Supabase con las tablas requeridas
 
 ## Instalación
